@@ -18,16 +18,17 @@
       "package": "com.dalilakedawai",
       "googleServicesFile": "./google-services.json",
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "RECORD_AUDIO",
-        "VIBRATE",
-        "WAKE_LOCK",
-        "RECEIVE_BOOT_COMPLETED",
-        "POST_NOTIFICATIONS"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "plugins": [
@@ -35,19 +36,28 @@
       "@react-native-firebase/messaging",
       [
         "expo-image-picker",
-        { "photosPermission": "يرجى السماح بالوصول لمعرض الصور" }
+        {
+          "photosPermission": "يرجى السماح بالوصول لمعرض الصور"
+        }
       ],
       [
         "expo-location",
-        { "locationAlwaysAndWhenInUsePermission": "يرجى السماح بتحديد الموقع للبحث عن الصيدليات القريبة" }
+        {
+          "locationAlwaysAndWhenInUsePermission": "يرجى السماح بتحديد الموقع للبحث عن الصيدليات القريبة"
+        }
       ],
       [
         "expo-av",
-        { "microphonePermission": "يرجى السماح باستخدام الميكروفون لإرسال رسائل صوتية" }
+        {
+          "microphonePermission": "يرجى السماح باستخدام الميكروفون لإرسال رسائل صوتية"
+        }
       ]
     ],
     "extra": {
-      "eas": {}
-    }
+      "eas": {
+        "projectId": "cd4274e0-0643-4f70-a7f3-dc3958369a4d"
+      }
+    },
+    "owner": "ali078"
   }
 }
