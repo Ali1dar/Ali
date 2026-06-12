@@ -1,24 +1,12 @@
-// App.js  ← الملف الرئيسي المعدل لدعم الإشعارات بالخلفية والForeground وإصلاح زر الرجوع وتوسيع شريط الهيدر
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, StatusBar, Alert, BackHandler, PermissionsAndroid } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, BackHandler, PermissionsAndroid } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/utils/ThemeContext';
 import { firebaseAuth, db } from './src/utils/firebase';
 import messaging from '@react-native-firebase/messaging'; 
-import * as Notifications from 'expo-notifications'; // 🔴 إضافة مكتبة إدارة إشعارات النظام
+import * as Notifications from 'expo-notifications';
 
-import AuthScreen from './src/screens/AuthScreen';
-import PatientScreen from './src/screens/PatientScreen';
-import PharmacyScreen from './src/screens/PharmacyScreen';
-import ChatScreen from './src/screens/ChatScreen';
-import SettingsScreen from './src/screens/SettingsScreen';
-import NearbyScreen from './src/screens/NearbyScreen';
-import InboxScreen from './src/screens/InboxScreen';
-import SubscriptionOverlay from './src/components/SubscriptionOverlay';
-import Toast from './src/components/Toast';
-
-// 🔴 1. إعداد طريقة عرض الإشعار البرمجي للنظام
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -27,19 +15,21 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// 🔴 2. معالج إشعارات الخلفية (يعمل والتطبيق مغلق تماماً لاستقبال البيانات وبناء الإشعار علوياً)
 messaging().setBackgroundMessageHandler(async remoteMessage => {
   console.log('وصل إشعار جديد في الخلفية:', remoteMessage);
-  
-  // إجبار أندرويد على إظهار الإشعار في شريط الهاتف حتى لو أرسل السيرفر صيغة data فقط
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: remoteMessage.notification?.title || remoteMessage.data?.title || "رسالة جديدة ✉️",
-      body: remoteMessage.notification?.body || remoteMessage.data?.body || "لديك رسالة جديدة في دليلك الدوائي",
-      sound: true,
-    },
-    trigger: null,
-  });
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: remoteMessage.notification?.title || remoteMessage.data?.title || "رسالة جديدة ✉️",
+        body: remoteMessage.notification?.body || remoteMessage.data?.body || "لديك رسالة جديدة في دليلك الدوائي",
+        sound: true,
+        channelId: 'default',
+      },
+      trigger: null,
+    });
+  } catch (error) {
+    console.log('فشل إشعار الخلفية:', error);
+  }
 });
 
 function AppContent() {
@@ -70,7 +60,6 @@ function AppContent() {
     setTimeout(() => setToast(p => ({ ...p, visible: false })), 3200);
   };
 
-  // 🔴 3. دالة طلب الصلاحيات وجلب الـ FCM Token وحفظه في Firebase
   const setupCloudMessaging = async (userId) => {
     try {
       const authStatus = await messaging().requestPermission();
@@ -85,56 +74,55 @@ function AppContent() {
         }
       }
     } catch (error) {
-      console.log('خطأ أثناء إعداد الإشعارات:', error);
+      console.log('خطأ إعداد الإشعارات:', error);
     }
   };
 
-  // 🔴 4. تهيئة قنوات أندرويد عالية الأهمية والاستماع للإشعارات والتطبيق مفتوح (Foreground)
   useEffect(() => {
     const configureNotificationsChannel = async () => {
-      if (Platform.OS === 'android') {
-        // طلب إذن نظام أندرويد 13 فما فوق لعرض الإشعارات المنبثقة
-        await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-        );
+      try {
+        if (Platform.OS === 'android') {
+          await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+          );
 
-        // إنشاء قناة إشعارات بأقصى أهمية (MAX) لإجبار الهاتف على تشغيل الصوت والنافذة المنبثقة
-        await Notifications.setNotificationChannelAsync('default', {
-          name: 'Default Channel',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#00796b',
-        });
+          await Notifications.setNotificationChannelAsync('default', {
+            name: 'Default Channel',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#00796b',
+          });
+        }
+      } catch (err) {
+        console.log('خطأ صلاحيات المانيفست:', err);
       }
     };
 
     configureNotificationsChannel();
 
-    // مستمع الإشعارات والتطبيق مفتوح
     const unsubscribe = messaging().onMessage(async remoteMessage => {
-      // 1. إظهار التوست الداخلي المعتاد لديك
       showToast(`✉️ رسالة جديدة: ${remoteMessage.notification?.body || 'لديك تحديث جديد'}`);
-      
-      // 2. إجبار النظام على عرض إشعار رسمي علوي حتى والتطبيق مفتوح
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: remoteMessage.notification?.title || "رسالة جديدة ✉️",
-          body: remoteMessage.notification?.body || "لديك رسالة جديدة في المحادثة",
-        },
-        trigger: null,
-      });
+      try {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: remoteMessage.notification?.title || "رسالة جديدة ✉️",
+            body: remoteMessage.notification?.body || "لديك رسالة جديدة في المحادثة",
+            channelId: 'default',
+          },
+          trigger: null,
+        });
+      } catch (e) {
+        console.log('خطأ إشعار المقدمة:', e);
+      }
     });
 
     return unsubscribe;
   }, []);
 
-  // 🔴 5. إضافة مستمع زر الرجوع لإغلاق النوافذ الفرعية أو تأكيد الخروج من التطبيق
   useEffect(() => {
     const handleBackPress = () => {
       const { chatOpen, settingsOpen, nearbyOpen, inboxOpen, user } = stateRef.current;
-
       if (!user) return false;
-
       if (chatOpen) { setChatOpen(false); return true; }
       if (settingsOpen) { setSettingsOpen(false); return true; }
       if (nearbyOpen) { setNearbyOpen(false); return true; }
@@ -156,13 +144,11 @@ function AppContent() {
     return () => backHandler.remove();
   }, []);
 
-  // Auth listener
   useEffect(() => {
     return firebaseAuth.onAuthStateChanged(u => {
       if (u) {
         setUser(u);
         setupCloudMessaging(u.uid);
-
         db.ref(`users/${u.uid}`).on('value', snap => {
           const d = snap.val();
           setUserData(d);
@@ -181,7 +167,6 @@ function AppContent() {
     });
   }, []);
 
-  // Pharmacy inbox unread
   useEffect(() => {
     if (!user || userData?.role !== 'pharmacy') return;
     const uid = user.uid;
@@ -240,13 +225,11 @@ function AppContent() {
 
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
-      <ExpoStatusBar style={isDark ? 'light' : 'light'} backgroundColor="#00796b" />
-
+      <ExpoStatusBar style="light" backgroundColor="#00796b" />
       {!user ? (
         <AuthScreen onToast={showToast} />
       ) : (
         <View style={{ flex: 1 }}>
-          {/* Header */}
           <LinearGradient colors={['#00796b', '#004d40']} style={s.header}>
             <Text style={s.headerTitle}>دليلك الدوائي 💊</Text>
             <View style={s.headerBtns}>
@@ -266,8 +249,6 @@ function AppContent() {
               </TouchableOpacity>
             </View>
           </LinearGradient>
-
-          {/* Views */}
           {userData?.role !== 'pharmacy' ? (
             <PatientScreen
               onOpenChat={openChat}
@@ -287,8 +268,6 @@ function AppContent() {
           )}
         </View>
       )}
-
-      {/* Overlays */}
       <ChatScreen
         visible={chatOpen} onClose={() => setChatOpen(false)}
         chatId={chatId} pharmacyId={chatPid}
@@ -325,7 +304,6 @@ const s = StyleSheet.create({
   root: { flex: 1 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingTxt: { color: 'white', fontSize: 24, fontWeight: 'bold' },
-  
   header: {
     flexDirection: 'row', 
     justifyContent: 'space-between', 
@@ -334,16 +312,8 @@ const s = StyleSheet.create({
     paddingBottom: 15, 
     paddingTop: Platform.OS === 'android' ? 52 : 64, 
   },
-  headerTitle: { 
-    color: 'white', 
-    fontWeight: 'bold', 
-    fontSize: 18, 
-  },
-  headerBtns: { 
-    flexDirection: 'row', 
-    gap: 8, 
-    alignItems: 'center' 
-  },
+  headerTitle: { color: 'white', fontWeight: 'bold', fontSize: 18 },
+  headerBtns: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   hBtn: { 
     backgroundColor: 'rgba(255,255,255,0.18)', 
     width: 40, 
@@ -353,9 +323,5 @@ const s = StyleSheet.create({
     alignItems: 'center',
     elevation: 2, 
   },
-  hBtnTxt: { 
-    color: 'white', 
-    fontSize: 14, 
-    fontWeight: 'bold' 
-  },
+  hBtnTxt: { color: 'white', fontSize: 14, fontWeight: 'bold' },
 });
