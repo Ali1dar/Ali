@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "195415969543",
+    "firebase_url": "https://viralboost-web-38eec-default-rtdb.firebaseio.com",
+    "project_id": "viralboost-web-38eec",
+    "storage_bucket": "viralboost-web-38eec.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:195415969543:android:e5ce89d331e23852577fa2",
+        "android_client_info": {
+          "package_name": "com.dalilakedawai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtVddk_FoOXoD7_xObpuC_HCjRg94wct4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:195415969543:android:fe2ec226a1afb2f9577fa2",
+        "android_client_info": {
+          "package_name": "pharmacy.A1"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtVddk_FoOXoD7_xObpuC_HCjRg94wct4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

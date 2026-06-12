@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "دليلك الدوائي",
+    "slug": "dalilakedawai",
+    "version": "1.0.1",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#00796b"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#00796b"
+      },
+      "package": "com.dalilakedawai",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "RECORD_AUDIO",
+        "VIBRATE",
+        "WAKE_LOCK",
+        "RECEIVE_BOOT_COMPLETED",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
+      [
+        "expo-image-picker",
+        { "photosPermission": "يرجى السماح بالوصول لمعرض الصور" }
+      ],
+      [
+        "expo-location",
+        { "locationAlwaysAndWhenInUsePermission": "يرجى السماح بتحديد الموقع للبحث عن الصيدليات القريبة" }
+      ],
+      [
+        "expo-av",
+        { "microphonePermission": "يرجى السماح باستخدام الميكروفون لإرسال رسائل صوتية" }
+      ]
+    ],
+    "extra": {
+      "eas": {}
+    }
+  }
+}
