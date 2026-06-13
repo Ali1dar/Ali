@@ -1,5 +1,4 @@
 import messaging from '@react-native-firebase/messaging';
-import { Platform } from 'react-native';
 import { ref, update, get } from 'firebase/database';
 import { db } from './src/utils/firebase';
 
