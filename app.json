@@ -10,12 +10,6 @@
       "resizeMode": "cover",
       "backgroundColor": "#00796b"
     },
-    "notification": {
-      "icon": "./assets/adaptive-icon.png",
-      "color": "#00796b",
-      "androidMode": "default",
-      "androidCollapsedTitle": "دليلك الدوائي"
-    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -40,16 +34,11 @@
     "plugins": [
       "@react-native-firebase/app",
       [
-        "@react-native-firebase/messaging",
+        "expo-notifications",
         {
-          "ios": {
-            "permissions": [
-              "DISPLAY_NOTIFICATIONS",
-              "SOUND",
-              "BADGE",
-              "ALERT"
-            ]
-          }
+          "icon": "./assets/adaptive-icon.png",
+          "color": "#00796b",
+          "defaultChannel": "default"
         }
       ],
       [
