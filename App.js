@@ -1,4 +1,5 @@
 // App.js - إشعارات عبر Firebase فقط (بدون expo-notifications)
+import { registerForPushNotifications, setupNotificationListeners } from './notifications';
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, StatusBar, Alert, BackHandler, PermissionsAndroid } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';

@@ -273,7 +273,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       const userSnap = await db.ref(`users/${targetUid}`).once('value');
       const targetToken = userSnap.val()?.fcmToken;
       if (!targetToken) return;
-      await fetch('https://exp.host/--/api/v2/push/send', {
+      await fetch('https://vercel-api-five-omega.vercel.app/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: targetToken, sound: 'default', title, body, data: { chatId } }),
