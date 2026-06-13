@@ -7,12 +7,13 @@ import { db, firebaseAuth, getDistanceKm } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 import ProvincePicker from '../components/ProvincePicker';
 
-export default function PatientScreen({ onOpenChat, onOpenNearby, onToast, province, onProvinceChange }) {
+export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, onToast, province, onProvinceChange }) {
   const { theme } = useTheme();
   const [medInput, setMedInput] = useState('');
   const [image, setImage] = useState(null);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const listenerRef = useRef(null);
 
   useEffect(() => {
@@ -26,6 +27,25 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onToast, provi
     });
     return () => q.off('value', listenerRef.current);
   }, [province]);
+
+  // ✅ حساب الرسائل غير المقروءة للمريض
+  useEffect(() => {
+    const uid = firebaseAuth.currentUser?.uid;
+    if (!uid) return;
+    const ref = db.ref('chats');
+    ref.on('value', snap => {
+      let count = 0;
+      if (snap.exists()) {
+        snap.forEach(child => {
+          if (!child.key.includes(uid)) return;
+          const data = child.val()[uid] || {};
+          count += data.unreadPatient || 0;
+        });
+      }
+      setUnreadCount(count);
+    });
+    return () => ref.off('value');
+  }, []);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -86,6 +106,7 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onToast, provi
     : { t: '⏳ قيد الانتظار', c: '#ffb300', b: 'rgba(255,193,7,0.15)' };
 
   const st = mkStyles(theme);
+
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.bg }} contentContainerStyle={{ paddingBottom: 100 }}>
       <View style={[st.provinceBox, { backgroundColor: theme.bg, borderColor: theme.border }]}>
@@ -98,9 +119,11 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onToast, provi
         <Text style={[st.cardSub, { color: theme.subText }]}>اكتب اسم العلاج أو أرفق صورة الوصفة</Text>
 
         <View style={st.row}>
-          <TextInput style={[st.input, { backgroundColor: theme.cardBg, borderColor: theme.border, color: theme.text }]}
+          <TextInput
+            style={[st.input, { backgroundColor: theme.cardBg, borderColor: theme.border, color: theme.text }]}
             placeholder="اسم الدواء..." placeholderTextColor={theme.subText}
-            value={medInput} onChangeText={setMedInput} textAlign="right" />
+            value={medInput} onChangeText={setMedInput} textAlign="right"
+          />
           <TouchableOpacity style={[st.camBtn, { borderColor: theme.border, backgroundColor: theme.cardBg }]} onPress={pickImage}>
             <Text style={{ fontSize: 22 }}>📷</Text>
           </TouchableOpacity>
@@ -115,11 +138,33 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onToast, provi
           </View>
         )}
 
-        <TouchableOpacity style={[st.searchBtn, { backgroundColor: theme.primary }, loading && { opacity: 0.7 }]} onPress={handleSearch} disabled={loading}>
+        <TouchableOpacity
+          style={[st.searchBtn, { backgroundColor: theme.primary }, loading && { opacity: 0.7 }]}
+          onPress={handleSearch} disabled={loading}
+        >
           {loading ? <ActivityIndicator color="white" /> : <Text style={st.btnTxt}>إرسال الطلب 📤</Text>}
         </TouchableOpacity>
-        <TouchableOpacity style={[st.searchBtn, { backgroundColor: '#607d8b', marginTop: 10 }]} onPress={onOpenNearby}>
+
+        <TouchableOpacity
+          style={[st.searchBtn, { backgroundColor: '#607d8b', marginTop: 10 }]}
+          onPress={onOpenNearby}
+        >
           <Text style={st.btnTxt}>🏥 عرض الصيدليات القريبة والخافرة</Text>
+        </TouchableOpacity>
+
+        {/* ✅ زر محادثاتي مع الصيدليات */}
+        <TouchableOpacity
+          style={[st.searchBtn, { backgroundColor: '#0288d1', marginTop: 10 }]}
+          onPress={onOpenInbox}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={st.btnTxt}>💬 محادثاتي مع الصيدليات</Text>
+            {unreadCount > 0 && (
+              <View style={st.unreadBadge}>
+                <Text style={st.unreadTxt}>{unreadCount}</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -152,7 +197,8 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onToast, provi
                   </View>
                 </View>
               );
-            }} />
+            }}
+          />
         }
       </View>
     </ScrollView>
@@ -170,6 +216,8 @@ const mkStyles = (t) => StyleSheet.create({
   camBtn: { padding: 12, borderWidth: 2, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   searchBtn: { width: '100%', padding: 14, borderRadius: 8, alignItems: 'center' },
   btnTxt: { color: 'white', fontWeight: 'bold', fontSize: 15 },
+  unreadBadge: { backgroundColor: '#e53935', borderRadius: 10, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  unreadTxt: { color: 'white', fontWeight: 'bold', fontSize: 11 },
   sectionTitle: { fontSize: 17, fontWeight: 'bold', textAlign: 'right', marginBottom: 10 },
   empty: { fontStyle: 'italic', textAlign: 'center', marginTop: 10 },
   reqItem: { padding: 14, borderWidth: 1, borderRadius: 12, marginBottom: 10 },
