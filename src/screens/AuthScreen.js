@@ -97,9 +97,7 @@ export default function AuthScreen({ onToast }) {
 
           {/* عنوان التطبيق */}
           <View style={s.heroContent}>
-            <Text style={s.heroIcon}>💊</Text>
-            <Text style={s.heroTitle}>دليلك الدوائي</Text>
-            <Text style={s.heroSub}>ابحث عن دوائك في أقرب صيدلية</Text>
+            
           </View>
         </LinearGradient>
       </ImageBackground>
