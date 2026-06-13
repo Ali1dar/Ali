@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
-      "resizeMode": "contain",
+      "resizeMode": "cover",
       "backgroundColor": "#00796b"
     },
     "android": {
@@ -19,42 +19,35 @@
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "RECORD_AUDIO",
         "VIBRATE",
-        "MODIFY_AUDIO_SETTINGS"
+        "WAKE_LOCK",
+        "RECEIVE_BOOT_COMPLETED",
+        "POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
-      "expo-notifications",
       [
         "expo-image-picker",
-        {
-          "photosPermission": "يرجى السماح بالوصول لمعرض الصور واختيار صور الأدوية والوصفات."
-        }
+        { "photosPermission": "يرجى السماح بالوصول لمعرض الصور" }
       ],
       [
         "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "يرجى السماح بتحديد الموقع لتسهيل وصول المندوب إليك."
-        }
+        { "locationAlwaysAndWhenInUsePermission": "يرجى السماح بتحديد الموقع للبحث عن الصيدليات القريبة" }
       ],
       [
         "expo-av",
-        {
-          "microphonePermission": "يرجى السماح باستخدام الميكروفون لإرسال الرسائل الصوتية داخل المحادثة."
-        }
-      ],
-      "expo-asset",
-      "expo-font"
+        { "microphonePermission": "يرجى السماح باستخدام الميكروفون لإرسال رسائل صوتية" }
+      ]
     ],
     "extra": {
-      "eas": {
-        "projectId": "cd4274e0-0643-4f70-a7f3-dc3958369a4d"
-      }
-    },
-    "ios": {
-      "bundleIdentifier": "com.dalilakedawai"
+      "eas": {}
     }
   }
 }

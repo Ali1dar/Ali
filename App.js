@@ -1,35 +1,25 @@
+// App.js - إشعارات عبر Firebase فقط (بدون expo-notifications)
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, BackHandler, PermissionsAndroid } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, StatusBar, Alert, BackHandler, PermissionsAndroid } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/utils/ThemeContext';
 import { firebaseAuth, db } from './src/utils/firebase';
-import messaging from '@react-native-firebase/messaging'; 
-import * as Notifications from 'expo-notifications';
+import messaging from '@react-native-firebase/messaging';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+import AuthScreen from './src/screens/AuthScreen';
+import PatientScreen from './src/screens/PatientScreen';
+import PharmacyScreen from './src/screens/PharmacyScreen';
+import ChatScreen from './src/screens/ChatScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import NearbyScreen from './src/screens/NearbyScreen';
+import InboxScreen from './src/screens/InboxScreen';
+import SubscriptionOverlay from './src/components/SubscriptionOverlay';
+import Toast from './src/components/Toast';
 
+// معالج إشعارات الخلفية عبر Firebase مباشرة
 messaging().setBackgroundMessageHandler(async remoteMessage => {
-  console.log('وصل إشعار جديد في الخلفية:', remoteMessage);
-  try {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: remoteMessage.notification?.title || remoteMessage.data?.title || "رسالة جديدة ✉️",
-        body: remoteMessage.notification?.body || remoteMessage.data?.body || "لديك رسالة جديدة في دليلك الدوائي",
-        sound: true,
-        channelId: 'default',
-      },
-      trigger: null,
-    });
-  } catch (error) {
-    console.log('فشل إشعار الخلفية:', error);
-  }
+  console.log('إشعار في الخلفية:', remoteMessage);
 });
 
 function AppContent() {
@@ -60,8 +50,16 @@ function AppContent() {
     setTimeout(() => setToast(p => ({ ...p, visible: false })), 3200);
   };
 
+  // طلب صلاحية الإشعارات وحفظ FCM Token
   const setupCloudMessaging = async (userId) => {
     try {
+      // طلب إذن أندرويد 13+
+      if (Platform.OS === 'android') {
+        await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+      }
+
       const authStatus = await messaging().requestPermission();
       const enabled =
         authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
@@ -74,51 +72,19 @@ function AppContent() {
         }
       }
     } catch (error) {
-      console.log('خطأ إعداد الإشعارات:', error);
+      console.log('خطأ في الإشعارات:', error);
     }
   };
 
+  // استقبال الإشعارات والتطبيق مفتوح عبر Firebase
   useEffect(() => {
-    const configureNotificationsChannel = async () => {
-      try {
-        if (Platform.OS === 'android') {
-          await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-          );
-
-          await Notifications.setNotificationChannelAsync('default', {
-            name: 'Default Channel',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#00796b',
-          });
-        }
-      } catch (err) {
-        console.log('خطأ صلاحيات المانيفست:', err);
-      }
-    };
-
-    configureNotificationsChannel();
-
     const unsubscribe = messaging().onMessage(async remoteMessage => {
-      showToast(`✉️ رسالة جديدة: ${remoteMessage.notification?.body || 'لديك تحديث جديد'}`);
-      try {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: remoteMessage.notification?.title || "رسالة جديدة ✉️",
-            body: remoteMessage.notification?.body || "لديك رسالة جديدة في المحادثة",
-            channelId: 'default',
-          },
-          trigger: null,
-        });
-      } catch (e) {
-        console.log('خطأ إشعار المقدمة:', e);
-      }
+      showToast(`✉️ ${remoteMessage.notification?.body || 'رسالة جديدة'}`);
     });
-
     return unsubscribe;
   }, []);
 
+  // زر الرجوع
   useEffect(() => {
     const handleBackPress = () => {
       const { chatOpen, settingsOpen, nearbyOpen, inboxOpen, user } = stateRef.current;
@@ -127,23 +93,22 @@ function AppContent() {
       if (settingsOpen) { setSettingsOpen(false); return true; }
       if (nearbyOpen) { setNearbyOpen(false); return true; }
       if (inboxOpen) { setInboxOpen(false); return true; }
-
       Alert.alert(
         'تأكيد الخروج',
-        'هل تريد الخروج من التطبيق الحصري لدليلك الدوائي؟',
+        'هل تريد الخروج من التطبيق؟',
         [
-          { text: 'إلغاء', onPress: () => null, style: 'cancel' },
+          { text: 'إلغاء', style: 'cancel' },
           { text: 'خروج', onPress: () => BackHandler.exitApp() }
         ],
         { cancelable: true }
       );
       return true;
     };
-
     const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
     return () => backHandler.remove();
   }, []);
 
+  // Auth listener
   useEffect(() => {
     return firebaseAuth.onAuthStateChanged(u => {
       if (u) {
@@ -167,6 +132,7 @@ function AppContent() {
     });
   }, []);
 
+  // Pharmacy inbox unread
   useEffect(() => {
     if (!user || userData?.role !== 'pharmacy') return;
     const uid = user.uid;
@@ -180,10 +146,10 @@ function AppContent() {
   }, [user, userData?.role]);
 
   const checkSub = (exp) => {
-    if (!exp && exp !== 0) { setSubBlock({ show: true, msg: 'لم يتم العثور على صلاحية اشتراك مسجلة لهذا الحساب.' }); return; }
+    if (!exp && exp !== 0) { setSubBlock({ show: true, msg: 'لم يتم العثور على صلاحية اشتراك.' }); return; }
     const n = Number(exp);
     if (n === -1) { setSubBlock({ show: false, msg: '' }); return; }
-    if ((n - Date.now()) <= 0) setSubBlock({ show: true, msg: 'لقد انتهت فترة صلاحية الاشتراك الحالية.' });
+    if ((n - Date.now()) <= 0) setSubBlock({ show: true, msg: 'لقد انتهت فترة صلاحية الاشتراك.' });
     else setSubBlock({ show: false, msg: '' });
   };
 
@@ -226,10 +192,12 @@ function AppContent() {
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
       <ExpoStatusBar style="light" backgroundColor="#00796b" />
+
       {!user ? (
         <AuthScreen onToast={showToast} />
       ) : (
         <View style={{ flex: 1 }}>
+          {/* Header */}
           <LinearGradient colors={['#00796b', '#004d40']} style={s.header}>
             <Text style={s.headerTitle}>دليلك الدوائي 💊</Text>
             <View style={s.headerBtns}>
@@ -249,6 +217,8 @@ function AppContent() {
               </TouchableOpacity>
             </View>
           </LinearGradient>
+
+          {/* Views */}
           {userData?.role !== 'pharmacy' ? (
             <PatientScreen
               onOpenChat={openChat}
@@ -268,6 +238,8 @@ function AppContent() {
           )}
         </View>
       )}
+
+      {/* Overlays */}
       <ChatScreen
         visible={chatOpen} onClose={() => setChatOpen(false)}
         chatId={chatId} pharmacyId={chatPid}
@@ -305,23 +277,19 @@ const s = StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingTxt: { color: 'white', fontSize: 24, fontWeight: 'bold' },
   header: {
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16, 
-    paddingBottom: 15, 
-    paddingTop: Platform.OS === 'android' ? 52 : 64, 
+    paddingHorizontal: 16,
+    paddingBottom: 15,
+    paddingTop: Platform.OS === 'android' ? 52 : 64,
   },
   headerTitle: { color: 'white', fontWeight: 'bold', fontSize: 18 },
   headerBtns: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  hBtn: { 
-    backgroundColor: 'rgba(255,255,255,0.18)', 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    elevation: 2, 
+  hBtn: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    width: 40, height: 40, borderRadius: 20,
+    justifyContent: 'center', alignItems: 'center', elevation: 2,
   },
   hBtnTxt: { color: 'white', fontSize: 14, fontWeight: 'bold' },
 });
