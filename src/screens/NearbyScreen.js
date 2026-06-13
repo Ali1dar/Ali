@@ -14,9 +14,7 @@ export default function NearbyScreen({ visible, onClose, province, onDirectChat 
   const pharmaciesQueryRef = useRef(null);
 
   useEffect(() => {
-    if (visible && province) {
-      loadNearbyPharmacies();
-    }
+    if (visible && province) loadNearbyPharmacies();
     return () => { cleanUpListener(); };
   }, [visible, province]);
 
@@ -30,15 +28,13 @@ export default function NearbyScreen({ visible, onClose, province, onDirectChat 
       if (snap.exists()) {
         snap.forEach(c => {
           const d = c.val();
-          if (d.province === province) {
-            arr.push({ id: c.key, ...d });
-          }
+          if (d.province === province) arr.push({ id: c.key, ...d });
         });
       }
       setPharmacies(arr);
       setLoading(false);
     }, error => {
-      console.log("خطأ في جلب الصيدليات:", error);
+      console.log("خطأ:", error);
       setLoading(false);
     });
   };
@@ -50,35 +46,30 @@ export default function NearbyScreen({ visible, onClose, province, onDirectChat 
     }
   };
 
-  // ✅ فتح الخريطة
+  // ✅ فتح الخريطة - يستخدم item.lat و item.lng
   const openMap = (item) => {
-    const lat = item.location?.latitude;
-    const lng = item.location?.longitude;
-
-    if (!lat || !lng) {
+    if (!item.lat || !item.lng) {
       Alert.alert('تنبيه', 'هذه الصيدلية لم تحدد موقعها بعد');
       return;
     }
 
     const name = encodeURIComponent(item.pharmacyName || 'الصيدلية');
     const url = Platform.OS === 'ios'
-      ? `maps:0,0?q=${name}@${lat},${lng}`
-      : `geo:${lat},${lng}?q=${lat},${lng}(${name})`;
+      ? `maps:0,0?q=${name}@${item.lat},${item.lng}`
+      : `geo:${item.lat},${item.lng}?q=${item.lat},${item.lng}(${name})`;
 
     Linking.canOpenURL(url).then(supported => {
       if (supported) {
         Linking.openURL(url);
       } else {
-        // فتح Google Maps في المتصفح إذا لم يكن التطبيق مثبتاً
         Linking.openURL(
-          `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+          `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}`
         );
       }
     });
   };
 
   const st = mkStyles(theme);
-
   if (!visible) return null;
 
   return (
@@ -122,44 +113,34 @@ export default function NearbyScreen({ visible, onClose, province, onDirectChat 
                   💊 {item.pharmacyName || 'صيدلية غير مسمية'}
                 </Text>
                 <Text style={[st.pharmacyDetails, { color: theme.subText }]}>
-                  🕒 أوقات العمل: {item.workHours || 'غير محددة'}
+                  🕒 {item.workingHours || 'غير محددة'}
                 </Text>
-                {item.isKhofra && (
+                {item.isNightDuty && (
                   <View style={st.khofraBadge}>
-                    <Text style={st.khofraText}>🌙 صيدلية خافرة (24 ساعة)</Text>
+                    <Text style={st.khofraText}>🌙 خافرة 24 ساعة</Text>
                   </View>
                 )}
-
-                {/* ✅ يظهر فقط إذا ثبّت الصيدلاني موقعه */}
-                {item.location?.latitude && (
-                  <Text style={[st.locationSet, { color: '#00796b' }]}>
-                    📌 الموقع محدد
-                  </Text>
+                {item.lat && item.lng && (
+                  <Text style={st.locationSet}>📌 الموقع محدد</Text>
                 )}
               </View>
 
               {/* الأزرار */}
               <View style={st.btnGroup}>
-                {/* زر الخريطة - يظهر فقط إذا ثبّت الصيدلاني موقعه */}
+                {/* زر الخريطة */}
                 <TouchableOpacity
-                  style={[
-                    st.mapBtn,
-                    !item.location?.latitude && st.mapBtnDisabled
-                  ]}
+                  style={[st.mapBtn, (!item.lat || !item.lng) && st.mapBtnDisabled]}
                   onPress={() => openMap(item)}
                 >
-                  <Text style={st.mapBtnTxt}>🗺️ خريطة</Text>
+                  <Text style={st.btnTxt}>🗺️ خريطة</Text>
                 </TouchableOpacity>
 
                 {/* زر التواصل */}
                 <TouchableOpacity
                   style={[st.chatBtn, { backgroundColor: theme.primary }]}
-                  onPress={() => {
-                    cleanUpListener();
-                    onDirectChat(item.id, item.pharmacyName);
-                  }}
+                  onPress={() => { cleanUpListener(); onDirectChat(item.id, item.pharmacyName); }}
                 >
-                  <Text style={st.chatBtnTxt}>تواصل 💬</Text>
+                  <Text style={st.btnTxt}>تواصل 💬</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -177,9 +158,7 @@ const mkStyles = (t) => StyleSheet.create({
   header: {
     padding: 15,
     paddingTop: Platform.OS === 'android' ? 42 : 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'
   },
   headerTitle: {
     color: 'white', fontWeight: 'bold', fontSize: 16,
@@ -200,7 +179,7 @@ const mkStyles = (t) => StyleSheet.create({
   cardInfo: { flex: 1, alignItems: 'flex-end', paddingRight: 5 },
   pharmacyName: { fontWeight: 'bold', fontSize: 15, textAlign: 'right' },
   pharmacyDetails: { fontSize: 12, marginTop: 4, textAlign: 'right' },
-  locationSet: { fontSize: 11, marginTop: 4, fontWeight: 'bold' },
+  locationSet: { color: '#00796b', fontSize: 11, marginTop: 4, fontWeight: 'bold' },
   khofraBadge: {
     backgroundColor: 'rgba(255,152,0,0.15)',
     paddingHorizontal: 8, paddingVertical: 3,
@@ -216,10 +195,9 @@ const mkStyles = (t) => StyleSheet.create({
     alignItems: 'center', minWidth: 80
   },
   mapBtnDisabled: { backgroundColor: '#b0bec5' },
-  mapBtnTxt: { color: 'white', fontWeight: 'bold', fontSize: 12 },
   chatBtn: {
     paddingHorizontal: 12, paddingVertical: 8,
     borderRadius: 8, alignItems: 'center', minWidth: 80
   },
-  chatBtnTxt: { color: 'white', fontWeight: 'bold', fontSize: 12 },
+  btnTxt: { color: 'white', fontWeight: 'bold', fontSize: 12 },
 });
