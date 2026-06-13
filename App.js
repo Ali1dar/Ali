@@ -1,12 +1,19 @@
-// App.js - إشعارات عبر Firebase فقط (بدون expo-notifications)
-import { registerForPushNotifications, setupNotificationListeners } from './notifications';
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, StatusBar, Alert, BackHandler, PermissionsAndroid } from 'react-native';
+hereimport React, { useState, useEffect, useRef } from 'react';
+import {
+  View, Text, TouchableOpacity, StyleSheet,
+  Platform, Alert, BackHandler, PermissionsAndroid
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/utils/ThemeContext';
 import { firebaseAuth, db } from './src/utils/firebase';
-import messaging from '@react-native-firebase/messaging';
+
+// ✅ استيراد من notifications.js فقط
+import {
+  registerForPushNotifications,
+  setupNotificationListeners,
+  sendPushNotification
+} from './notifications';
 
 import AuthScreen from './src/screens/AuthScreen';
 import PatientScreen from './src/screens/PatientScreen';
@@ -18,17 +25,11 @@ import InboxScreen from './src/screens/InboxScreen';
 import SubscriptionOverlay from './src/components/SubscriptionOverlay';
 import Toast from './src/components/Toast';
 
-// معالج إشعارات الخلفية عبر Firebase مباشرة
-messaging().setBackgroundMessageHandler(async remoteMessage => {
-  console.log('إشعار في الخلفية:', remoteMessage);
-});
-
 function AppContent() {
   const { theme, isDark, toggle } = useTheme();
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
   const [ready, setReady] = useState(false);
-
   const [toast, setToast] = useState({ msg: '', type: 'info', visible: false });
   const [chatOpen, setChatOpen] = useState(false);
   const [chatId, setChatId] = useState(null);
@@ -51,39 +52,18 @@ function AppContent() {
     setTimeout(() => setToast(p => ({ ...p, visible: false })), 3200);
   };
 
-  // طلب صلاحية الإشعارات وحفظ FCM Token
-  const setupCloudMessaging = async (userId) => {
-    try {
-      // طلب إذن أندرويد 13+
-      if (Platform.OS === 'android') {
-        await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-        );
-      }
-
-      const authStatus = await messaging().requestPermission();
-      const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-      if (enabled) {
-        const token = await messaging().getToken();
-        if (token) {
-          await db.ref(`users/${userId}/fcmToken`).set(token);
-        }
-      }
-    } catch (error) {
-      console.log('خطأ في الإشعارات:', error);
-    }
-  };
-
-  // استقبال الإشعارات والتطبيق مفتوح عبر Firebase
+  // ✅ إعداد الإشعارات - يُستدعى مرة واحدة بعد تسجيل الدخول
   useEffect(() => {
-    const unsubscribe = messaging().onMessage(async remoteMessage => {
-      showToast(`✉️ ${remoteMessage.notification?.body || 'رسالة جديدة'}`);
-    });
-    return unsubscribe;
-  }, []);
+    if (!user) return;
+
+    // تسجيل وجلب التوكن
+    registerForPushNotifications(user.uid);
+
+    // تشغيل المستمعين
+    const unsubscribe = setupNotificationListeners();
+
+    return () => unsubscribe();
+  }, [user]);
 
   // زر الرجوع
   useEffect(() => {
@@ -114,7 +94,6 @@ function AppContent() {
     return firebaseAuth.onAuthStateChanged(u => {
       if (u) {
         setUser(u);
-        setupCloudMessaging(u.uid);
         db.ref(`users/${u.uid}`).on('value', snap => {
           const d = snap.val();
           setUserData(d);
@@ -126,7 +105,8 @@ function AppContent() {
           db.ref(`users/${u.uid}/presence`).update({ online: true, lastSeen: 'online' });
         });
       } else {
-        setUser(null); setUserData(null);
+        setUser(null);
+        setUserData(null);
         setSubBlock({ show: false, msg: '' });
         setReady(true);
       }
@@ -140,7 +120,11 @@ function AppContent() {
     const ref = db.ref('chats');
     const listener = ref.on('value', snap => {
       let has = false;
-      if (snap.exists()) snap.forEach(c => { if (c.key.includes(uid) && (c.val()[uid]?.unreadPharmacy || 0) > 0) has = true; });
+      if (snap.exists()) {
+        snap.forEach(c => {
+          if (c.key.includes(uid) && (c.val()[uid]?.unreadPharmacy || 0) > 0) has = true;
+        });
+      }
       setGlobalUnread(has);
     });
     return () => ref.off('value', listener);
@@ -155,7 +139,8 @@ function AppContent() {
   };
 
   const openChat = (id, name, pid = null) => {
-    setChatId(id); setChatName(name);
+    setChatId(id);
+    setChatName(name);
     setChatPid(pid || (userData?.role === 'pharmacy' ? user?.uid : null));
     setChatOpen(true);
   };
@@ -198,7 +183,6 @@ function AppContent() {
         <AuthScreen onToast={showToast} />
       ) : (
         <View style={{ flex: 1 }}>
-          {/* Header */}
           <LinearGradient colors={['#00796b', '#004d40']} style={s.header}>
             <Text style={s.headerTitle}>دليلك الدوائي 💊</Text>
             <View style={s.headerBtns}>
@@ -206,20 +190,28 @@ function AppContent() {
                 <Text style={s.hBtnTxt}>{isDark ? '☀️' : '🌙'}</Text>
               </TouchableOpacity>
               {userData?.role === 'pharmacy' && (
-                <TouchableOpacity style={[s.hBtn, { backgroundColor: '#0288d1' }]} onPress={() => setInboxOpen(true)}>
+                <TouchableOpacity
+                  style={[s.hBtn, { backgroundColor: '#0288d1' }]}
+                  onPress={() => setInboxOpen(true)}
+                >
                   <Text style={s.hBtnTxt}>💬 {globalUnread ? '🔴' : ''}</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity style={[s.hBtn, { backgroundColor: '#ff9800' }]} onPress={() => setSettingsOpen(true)}>
+              <TouchableOpacity
+                style={[s.hBtn, { backgroundColor: '#ff9800' }]}
+                onPress={() => setSettingsOpen(true)}
+              >
                 <Text style={s.hBtnTxt}>⚙️</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[s.hBtn, { backgroundColor: '#e53935' }]} onPress={logout}>
+              <TouchableOpacity
+                style={[s.hBtn, { backgroundColor: '#e53935' }]}
+                onPress={logout}
+              >
                 <Text style={s.hBtnTxt}>خروج</Text>
               </TouchableOpacity>
             </View>
           </LinearGradient>
 
-          {/* Views */}
           {userData?.role !== 'pharmacy' ? (
             <PatientScreen
               onOpenChat={openChat}
@@ -240,7 +232,6 @@ function AppContent() {
         </View>
       )}
 
-      {/* Overlays */}
       <ChatScreen
         visible={chatOpen} onClose={() => setChatOpen(false)}
         chatId={chatId} pharmacyId={chatPid}
@@ -257,7 +248,13 @@ function AppContent() {
       />
       <InboxScreen
         visible={inboxOpen} onClose={() => setInboxOpen(false)}
-        onOpenChat={(cid) => { setInboxOpen(false); setChatId(cid); setChatName('محادثة واردة'); setChatPid(user?.uid); setChatOpen(true); }}
+        onOpenChat={(cid) => {
+          setInboxOpen(false);
+          setChatId(cid);
+          setChatName('محادثة واردة');
+          setChatPid(user?.uid);
+          setChatOpen(true);
+        }}
       />
       <SubscriptionOverlay visible={subBlock.show} message={subBlock.msg} />
       <Toast message={toast.msg} visible={toast.visible} type={toast.type} />
