@@ -37,6 +37,7 @@ function AppContent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [nearbyOpen, setNearbyOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [patientInboxOpen, setPatientInboxOpen] = useState(false); // ✅ التغيير 1
   const [subBlock, setSubBlock] = useState({ show: false, msg: '' });
   const [province, setProvince] = useState('بغداد');
   const [globalUnread, setGlobalUnread] = useState(false);
@@ -156,7 +157,6 @@ function AppContent() {
     showToast('تم تسجيل الخروج');
   };
 
-  // ✅ شاشة التحميل - التصميم 2
   if (!ready) {
     return (
       <LinearGradient
@@ -218,6 +218,7 @@ function AppContent() {
             <PatientScreen
               onOpenChat={openChat}
               onOpenNearby={() => setNearbyOpen(true)}
+              onOpenInbox={() => setPatientInboxOpen(true)} // ✅ التغيير 3
               onToast={showToast}
               province={province}
               onProvinceChange={changeProvince}
@@ -248,13 +249,29 @@ function AppContent() {
         visible={nearbyOpen} onClose={() => setNearbyOpen(false)}
         province={province} onDirectChat={openDirectChat}
       />
+      {/* ✅ التغيير 2 - InboxScreen الصيدلية مع role */}
       <InboxScreen
-        visible={inboxOpen} onClose={() => setInboxOpen(false)}
+        visible={inboxOpen}
+        onClose={() => setInboxOpen(false)}
+        role="pharmacy"
         onOpenChat={(cid) => {
           setInboxOpen(false);
           setChatId(cid);
           setChatName('محادثة واردة');
           setChatPid(user?.uid);
+          setChatOpen(true);
+        }}
+      />
+      {/* ✅ التغيير 2 - InboxScreen المريض */}
+      <InboxScreen
+        visible={patientInboxOpen}
+        onClose={() => setPatientInboxOpen(false)}
+        role="patient"
+        onOpenChat={(cid) => {
+          setPatientInboxOpen(false);
+          setChatId(cid);
+          setChatName('محادثة مع الصيدلية');
+          setChatPid(null);
           setChatOpen(true);
         }}
       />
@@ -274,8 +291,6 @@ export default function App() {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
-
-  // ── شاشة التحميل ──
   loadingCard: {
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 24,
@@ -316,8 +331,6 @@ const s = StyleSheet.create({
     backgroundColor: '#00bfa5',
     borderRadius: 2,
   },
-
-  // ── الهيدر ──
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
