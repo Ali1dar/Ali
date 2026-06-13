@@ -1,14 +1,13 @@
-hereimport React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Platform, Alert, BackHandler, PermissionsAndroid
+  Platform, Alert, BackHandler
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/utils/ThemeContext';
 import { firebaseAuth, db } from './src/utils/firebase';
 
-// ✅ استيراد من notifications.js فقط
 import {
   registerForPushNotifications,
   setupNotificationListeners,
@@ -52,20 +51,13 @@ function AppContent() {
     setTimeout(() => setToast(p => ({ ...p, visible: false })), 3200);
   };
 
-  // ✅ إعداد الإشعارات - يُستدعى مرة واحدة بعد تسجيل الدخول
   useEffect(() => {
     if (!user) return;
-
-    // تسجيل وجلب التوكن
     registerForPushNotifications(user.uid);
-
-    // تشغيل المستمعين
     const unsubscribe = setupNotificationListeners();
-
     return () => unsubscribe();
   }, [user]);
 
-  // زر الرجوع
   useEffect(() => {
     const handleBackPress = () => {
       const { chatOpen, settingsOpen, nearbyOpen, inboxOpen, user } = stateRef.current;
@@ -89,7 +81,6 @@ function AppContent() {
     return () => backHandler.remove();
   }, []);
 
-  // Auth listener
   useEffect(() => {
     return firebaseAuth.onAuthStateChanged(u => {
       if (u) {
@@ -113,7 +104,6 @@ function AppContent() {
     });
   }, []);
 
-  // Pharmacy inbox unread
   useEffect(() => {
     if (!user || userData?.role !== 'pharmacy') return;
     const uid = user.uid;
@@ -166,12 +156,24 @@ function AppContent() {
     showToast('تم تسجيل الخروج');
   };
 
+  // ✅ شاشة التحميل - التصميم 2
   if (!ready) {
     return (
-      <View style={[s.loading, { backgroundColor: '#00796b' }]}>
-        <Text style={s.loadingTxt}>دليلك الدوائي...</Text>
-        <Text style={{ color: '#b2dfdb', fontSize: 13, marginTop: 6 }}>💊</Text>
-      </View>
+      <LinearGradient
+        colors={['#00251a', '#00695c']}
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <View style={s.loadingCard}>
+          <View style={s.loadingIconCircle}>
+            <Text style={{ fontSize: 40 }}>💊</Text>
+          </View>
+          <Text style={s.loadingTitle}>دليلك الدوائي</Text>
+          <Text style={s.loadingEn}>YOUR DRUG GUIDE</Text>
+          <View style={s.loadingBarBg}>
+            <View style={s.loadingBarFill} />
+          </View>
+        </View>
+      </LinearGradient>
     );
   }
 
@@ -272,8 +274,50 @@ export default function App() {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  loadingTxt: { color: 'white', fontSize: 24, fontWeight: 'bold' },
+
+  // ── شاشة التحميل ──
+  loadingCard: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    paddingVertical: 40,
+    paddingHorizontal: 50,
+    alignItems: 'center',
+    gap: 16,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+  },
+  loadingIconCircle: {
+    width: 80, height: 80,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 40,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  loadingTitle: {
+    fontSize: 30, fontWeight: '800',
+    color: 'white', letterSpacing: 1,
+  },
+  loadingEn: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12, letterSpacing: 3,
+  },
+  loadingBarBg: {
+    width: 200, height: 4,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 2, marginTop: 8,
+    overflow: 'hidden',
+  },
+  loadingBarFill: {
+    width: '60%', height: '100%',
+    backgroundColor: '#00bfa5',
+    borderRadius: 2,
+  },
+
+  // ── الهيدر ──
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
