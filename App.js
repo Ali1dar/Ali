@@ -37,15 +37,15 @@ function AppContent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [nearbyOpen, setNearbyOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [patientInboxOpen, setPatientInboxOpen] = useState(false);
+  const [patientInboxOpen, setPatientInboxOpen] = useState(false); // ✅ التغيير 1
   const [subBlock, setSubBlock] = useState({ show: false, msg: '' });
   const [province, setProvince] = useState('بغداد');
   const [globalUnread, setGlobalUnread] = useState(false);
 
-  const stateRef = useRef({ chatOpen, settingsOpen, nearbyOpen, inboxOpen, patientInboxOpen, user });
+  const stateRef = useRef({ chatOpen, settingsOpen, nearbyOpen, inboxOpen, user });
   useEffect(() => {
-    stateRef.current = { chatOpen, settingsOpen, nearbyOpen, inboxOpen, patientInboxOpen, user };
-  }, [chatOpen, settingsOpen, nearbyOpen, inboxOpen, patientInboxOpen, user]);
+    stateRef.current = { chatOpen, settingsOpen, nearbyOpen, inboxOpen, user };
+  }, [chatOpen, settingsOpen, nearbyOpen, inboxOpen, user]);
 
   const showToast = (msg, type = 'info') => {
     setToast({ msg, type, visible: true });
@@ -61,13 +61,12 @@ function AppContent() {
 
   useEffect(() => {
     const handleBackPress = () => {
-      const { chatOpen, settingsOpen, nearbyOpen, inboxOpen, patientInboxOpen, user } = stateRef.current;
+      const { chatOpen, settingsOpen, nearbyOpen, inboxOpen, user } = stateRef.current;
       if (!user) return false;
       if (chatOpen) { setChatOpen(false); return true; }
       if (settingsOpen) { setSettingsOpen(false); return true; }
       if (nearbyOpen) { setNearbyOpen(false); return true; }
       if (inboxOpen) { setInboxOpen(false); return true; }
-      if (patientInboxOpen) { setPatientInboxOpen(false); return true; }
       Alert.alert(
         'تأكيد الخروج',
         'هل تريد الخروج من التطبيق؟',
@@ -219,7 +218,7 @@ function AppContent() {
             <PatientScreen
               onOpenChat={openChat}
               onOpenNearby={() => setNearbyOpen(true)}
-              onOpenInbox={() => setPatientInboxOpen(true)}
+              onOpenInbox={() => setPatientInboxOpen(true)} // ✅ التغيير 3
               onToast={showToast}
               province={province}
               onProvinceChange={changeProvince}
@@ -250,6 +249,7 @@ function AppContent() {
         visible={nearbyOpen} onClose={() => setNearbyOpen(false)}
         province={province} onDirectChat={openDirectChat}
       />
+      {/* ✅ التغيير 2 - InboxScreen الصيدلية مع role */}
       <InboxScreen
         visible={inboxOpen}
         onClose={() => setInboxOpen(false)}
@@ -262,7 +262,7 @@ function AppContent() {
           setChatOpen(true);
         }}
       />
-      {/* ✅ InboxScreen المريض - مع استخراج pharmacyId من chatId */}
+      {/* ✅ التغيير 2 - InboxScreen المريض */}
       <InboxScreen
         visible={patientInboxOpen}
         onClose={() => setPatientInboxOpen(false)}
@@ -271,9 +271,7 @@ function AppContent() {
           setPatientInboxOpen(false);
           setChatId(cid);
           setChatName('محادثة مع الصيدلية');
-          // ✅ استخراج pharmacyId من chatId: p_patientId_pharmacyId
-          const parts = cid.split('_');
-          setChatPid(parts[2] || null);
+          setChatPid(null);
           setChatOpen(true);
         }}
       />
