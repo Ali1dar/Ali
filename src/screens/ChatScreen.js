@@ -10,7 +10,7 @@ import * as Location from 'expo-location';
 import { db, firebaseAuth, formatLastSeen } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 
-// ── مشغّل الصوت ────────────────────────────────────────────────
+// ── مكوّن مشغّل الصوت ──────────────────────────────────────────
 function AudioPlayer({ uri, isMe }) {
   const [sound, setSound] = useState(null);
   const [playing, setPlaying] = useState(false);
@@ -55,7 +55,7 @@ function AudioPlayer({ uri, isMe }) {
           setPlaying(false);
           setPosition(0);
           clearInterval(intervalRef.current);
-          // ✅ إصلاح مشكلة الصوت - تحرير الذاكرة بعد الانتهاء
+          // ✅ تحرير الصوت بعد الانتهاء لحل مشكلة التشغيل مرة واحدة
           s.unloadAsync();
           setSound(null);
         }
@@ -131,7 +131,7 @@ const ap = StyleSheet.create({
   rateBtn: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, marginLeft: 4 },
 });
 
-// ── مؤشر التسجيل ───────────────────────────────────────────────
+// ── مؤشر تسجيل ─────────────────────────────────────────────────
 function RecordingIndicator({ seconds }) {
   const pulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -177,14 +177,14 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const [activeTab, setActiveTab] = useState(null);
   const [selectedImg, setSelectedImg] = useState(null);
   const [imgModalVisible, setImgModalVisible] = useState(false);
+
+  // ✅ التعديل 1 - إضافة autoScroll state
   const [autoScroll, setAutoScroll] = useState(true);
 
   const listRef = useRef(null);
   const slideAnim = useRef(new Animated.Value(700)).current;
   const msgRef = useRef(null);
   const recTimerRef = useRef(null);
-  // ✅ إصلاح 3 - ref لمستمع الحالة
-  const presenceRef = useRef(null);
 
   const activePid = role === 'pharmacy' ? firebaseAuth.currentUser?.uid : (activeTab || pharmacyId);
   const isDirectChat = chatId?.startsWith('p_');
@@ -196,14 +196,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       if (role === 'patient' && !isDirectChat) loadTabs();
       else startListen(chatId, role === 'pharmacy' ? firebaseAuth.currentUser?.uid : pharmacyId);
     }
-    return () => {
-      if (msgRef.current) msgRef.current();
-      // ✅ إصلاح 3 - تنظيف مستمع الحالة
-      if (presenceRef.current) {
-        presenceRef.current.off('value');
-        presenceRef.current = null;
-      }
-    };
+    return () => { if (msgRef.current) msgRef.current(); };
   }, [visible, chatId]);
 
   useEffect(() => {
@@ -217,7 +210,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   }, [visible, imgModalVisible]);
 
   useEffect(() => {
-    if (!visible && isRecording) stopRecordingAndSend(false);
+    if (!visible && isRecording) {
+      stopRecordingAndSend(false);
+    }
   }, [visible]);
 
   const loadTabs = async () => {
@@ -228,9 +223,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     snap.forEach(c => {
       if (!['unreadPharmacy', 'unreadPatient'].includes(c.key)) {
         ids.push(c.key);
-        ps.push(db.ref(`users/${c.key}`).once('value').then(s => {
-          names[c.key] = s.val()?.pharmacyName || `صيدلية(${c.key.slice(0, 5)})`;
-        }));
+        ps.push(db.ref(`users/${c.key}`).once('value').then(s => { names[c.key] = s.val()?.pharmacyName || `صيدلية(${c.key.slice(0, 5)})`; }));
       }
     });
     await Promise.all(ps);
@@ -244,9 +237,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     startListen(chatId, pid);
   };
 
+  // ✅ التعديل 2 - startListen مع firstLoad
   const startListen = (cId, pid) => {
     if (msgRef.current) msgRef.current();
-
     if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0);
     else db.ref(`chats/${cId}/${pid}/unreadPatient`).set(0);
 
@@ -256,6 +249,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     const listener = ref.on('value', snap => {
       const arr = [];
       if (snap.exists()) snap.forEach(c => arr.push({ id: c.key, ...c.val() }));
+
       setMessages(prev => {
         const isNewMsg = prev.length > 0 && arr.length > prev.length;
         if (firstLoad || isNewMsg) {
@@ -269,25 +263,11 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
     msgRef.current = () => ref.off('value', listener);
 
-    // ✅ إصلاح 3 - تنظيف المستمع القديم قبل إنشاء جديد
-    if (presenceRef.current) {
-      presenceRef.current.off('value');
-      presenceRef.current = null;
-    }
-
-    // ✅ إصلاح presence - تحديد الهدف الصحيح
     let target = pid;
     if (role === 'pharmacy') {
-      target = isDirectChat
-        ? cId.split('_')[1]
-        : (localRequests?.find(r => r.id === cId)?.patientId || pid);
-    } else {
-      target = isDirectChat ? cId.split('_')[2] : pid;
+      target = isDirectChat ? cId.split('_')[1] : (localRequests?.find(r => r.id === cId)?.patientId || pid);
     }
-
-    const pRef = db.ref(`users/${target}/presence`);
-    presenceRef.current = pRef;
-    pRef.on('value', s => {
+    db.ref(`users/${target}/presence`).on('value', s => {
       const d = s.val();
       setUserStatus(d?.online === true ? '🟢 متصل الآن' : `🕒 ${formatLastSeen(d?.lastSeen)}`);
     });
@@ -297,19 +277,15 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     try {
       let targetUid = activePid;
       if (role === 'pharmacy') {
-        targetUid = isDirectChat
-          ? chatId.split('_')[1]
-          : (localRequests?.find(r => r.id === chatId)?.patientId || activePid);
+        targetUid = isDirectChat ? chatId.split('_')[1] : (localRequests?.find(r => r.id === chatId)?.patientId || activePid);
       }
       const userSnap = await db.ref(`users/${targetUid}`).once('value');
-      // ✅ إصلاح 1 - fcm_token بدل fcmToken
-      const targetToken = userSnap.val()?.fcm_token;
+      const targetToken = userSnap.val()?.fcmToken;
       if (!targetToken) return;
       await fetch('https://vercel-api-five-omega.vercel.app/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // ✅ إصلاح 2 - token بدل to
-        body: JSON.stringify({ token: targetToken, title, body, data: { chatId } }),
+        body: JSON.stringify({ to: targetToken, sound: 'default', title, body, data: { chatId } }),
       });
     } catch (e) { console.log('فشل الإشعار:', e); }
   };
@@ -425,21 +401,28 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       )}
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={80}>
+
+        {/* ✅ التعديل 3 - FlatList مع التمرير الذكي */}
         <FlatList
           ref={listRef}
           data={messages}
-          // ✅ إصلاح 4 - index بدل Math.random
-          keyExtractor={(i, index) => i.id || String(index)}
+          keyExtractor={i => i.id || String(Math.random())}
           style={[st.msgList, { backgroundColor: theme.chatBg }]}
           contentContainerStyle={{ padding: 14, paddingBottom: 20 }}
           onContentSizeChange={() => {
-            if (autoScroll) listRef.current?.scrollToEnd({ animated: false });
+            if (autoScroll) {
+              listRef.current?.scrollToEnd({ animated: false });
+            }
           }}
-          onScrollBeginDrag={() => setAutoScroll(false)}
+          onScrollBeginDrag={() => {
+            setAutoScroll(false);
+          }}
           onScroll={(e) => {
             const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
             const isAtBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 60;
-            if (isAtBottom) setAutoScroll(true);
+            if (isAtBottom) {
+              setAutoScroll(true);
+            }
           }}
           scrollEventThrottle={100}
           renderItem={({ item }) => {
@@ -455,7 +438,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                       <Image source={{ uri: item.image }} style={st.msgImg} resizeMode="cover" />
                     </TouchableOpacity>
                   )}
-                  {item.audio && <AudioPlayer uri={item.audio} isMe={isMe} />}
+                  {item.audio && (
+                    <AudioPlayer uri={item.audio} isMe={isMe} />
+                  )}
                   {item.locationUrl && (
                     <TouchableOpacity onPress={() => Linking.openURL(item.locationUrl)} style={st.locBubble}>
                       <Text style={{ color: '#00796b', fontWeight: 'bold' }}>📍 عرض الموقع على الخريطة</Text>
