@@ -1,4 +1,4 @@
-// src/screens/AuthScreen.js - صورة splash تملأ الشاشة بالكامل
+// src/screens/AuthScreen.js
 import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
@@ -9,8 +9,27 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { firebaseAuth, db, PROVINCES, arabicError } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 import ProvincePicker from '../components/ProvincePicker';
+import messaging from '@react-native-firebase/messaging'; // ✅ إضافة
 
 const { width, height } = Dimensions.get('window');
+
+// ✅ دالة حفظ التوكن
+const saveFcmToken = async (uid) => {
+  try {
+    const authStatus = await messaging().requestPermission();
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+    if (!enabled) return;
+    const token = await messaging().getToken();
+    if (token) {
+      await db.ref(`users/${uid}/fcmToken`).set(token);
+      console.log('✅ تم حفظ fcmToken:', token);
+    }
+  } catch (e) {
+    console.log('❌ خطأ في حفظ التوكن:', e);
+  }
+};
 
 export default function AuthScreen({ onToast }) {
   const { theme, isDark, toggle } = useTheme();
@@ -31,7 +50,8 @@ export default function AuthScreen({ onToast }) {
     setLoading(true);
     try {
       if (isLogin) {
-        await firebaseAuth.signInWithEmailAndPassword(email.trim(), password.trim());
+        const cred = await firebaseAuth.signInWithEmailAndPassword(email.trim(), password.trim());
+        await saveFcmToken(cred.user.uid); // ✅
       } else {
         if (!fullName.trim()) { setLoading(false); return onToast('يرجى كتابة الاسم الكامل', 'error'); }
         const cred = await firebaseAuth.createUserWithEmailAndPassword(email.trim(), password.trim());
@@ -39,6 +59,7 @@ export default function AuthScreen({ onToast }) {
           role: 'patient', patientName: fullName.trim(), email: email.trim(),
           province, subscriptionExpiry: Date.now() + 30 * 86400000,
         });
+        await saveFcmToken(cred.user.uid); // ✅
       }
     } catch (e) { onToast(arabicError(e.code), 'error'); }
     finally { setLoading(false); }
@@ -70,6 +91,7 @@ export default function AuthScreen({ onToast }) {
           subscriptionExpiry: Date.now() + 30 * 86400000,
         });
       }
+      await saveFcmToken(r.user.uid); // ✅
       onToast('تم الدخول بنجاح!');
     } catch { onToast('رمز خاطئ أو منتهي الصلاحية', 'error'); }
     finally { setLoading(false); }
@@ -79,30 +101,22 @@ export default function AuthScreen({ onToast }) {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* ── Hero Banner يملأ الشاشة ── */}
       <ImageBackground
         source={require('../../assets/splash.png')}
         style={s.heroBg}
         resizeMode="cover"
       >
-        {/* طبقة تدرج فوق الصورة لتحسين وضوح النص */}
         <LinearGradient
           colors={['rgba(0,77,64,0.55)', 'rgba(0,121,107,0.85)', 'rgba(0,77,64,0.97)']}
           style={s.heroGradient}
         >
-          {/* زر الوضع الليلي في الأعلى */}
           <TouchableOpacity style={s.themeBtn} onPress={toggle}>
             <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{isDark ? '☀️' : '🌙'}</Text>
           </TouchableOpacity>
-
-          {/* عنوان التطبيق */}
-          <View style={s.heroContent}>
-            
-          </View>
+          <View style={s.heroContent} />
         </LinearGradient>
       </ImageBackground>
 
-      {/* ── بطاقة تسجيل الدخول ── */}
       <ScrollView
         style={[s.formArea, { backgroundColor: theme.bg }]}
         contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
@@ -112,7 +126,6 @@ export default function AuthScreen({ onToast }) {
           <Text style={[s.title, { color: theme.primary }]}>{isLogin ? 'تسجيل الدخول' : 'حساب جديد'}</Text>
           <Text style={[s.sub, { color: theme.subText }]}>{isLogin ? 'مرحباً، سجّل دخولك للمتابعة' : 'أنشئ حسابك الآن'}</Text>
 
-          {/* Tabs */}
           <View style={s.tabs}>
             {['email', 'phone'].map(m => (
               <TouchableOpacity key={m} style={[s.tab, { borderColor: theme.border, backgroundColor: method === m ? theme.primary : theme.bg }]} onPress={() => setMethod(m)}>
@@ -178,37 +191,12 @@ export default function AuthScreen({ onToast }) {
 }
 
 const styles = (theme) => StyleSheet.create({
-  // Hero يملأ ثلث الشاشة العلوي
-  heroBg: {
-    width: width,
-    height: height * 0.35,
-  },
-  heroGradient: {
-    flex: 1,
-    paddingTop: Platform.OS === 'android' ? 40 : 55,
-    paddingHorizontal: 20,
-  },
-  themeBtn: {
-    alignSelf: 'flex-end',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  heroContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  heroIcon: { fontSize: 48, marginBottom: 8 },
-  heroTitle: { color: 'white', fontSize: 28, fontWeight: 'bold', textAlign: 'center' },
-  heroSub: { color: 'rgba(255,255,255,0.85)', fontSize: 14, marginTop: 6, textAlign: 'center' },
-
-  // بطاقة النموذج
+  heroBg: { width: width, height: height * 0.35 },
+  heroGradient: { flex: 1, paddingTop: Platform.OS === 'android' ? 40 : 55, paddingHorizontal: 20 },
+  themeBtn: { alignSelf: 'flex-end', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  heroContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   formArea: { flex: 1 },
-  card: {
-    padding: 22, borderRadius: 16, borderWidth: 1, elevation: 4,
-  },
+  card: { padding: 22, borderRadius: 16, borderWidth: 1, elevation: 4 },
   title: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 4 },
   sub: { fontSize: 13, textAlign: 'center', marginBottom: 18 },
   tabs: { flexDirection: 'row', gap: 10, marginBottom: 18 },
