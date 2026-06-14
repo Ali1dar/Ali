@@ -10,7 +10,6 @@ import * as Location from 'expo-location';
 import { db, firebaseAuth, formatLastSeen } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 
-// ── مكوّن مشغّل الصوت ──────────────────────────────────────────
 function AudioPlayer({ uri, isMe }) {
   const [sound, setSound] = useState(null);
   const [playing, setPlaying] = useState(false);
@@ -55,7 +54,6 @@ function AudioPlayer({ uri, isMe }) {
           setPlaying(false);
           setPosition(0);
           clearInterval(intervalRef.current);
-          // ✅ تحرير الصوت بعد الانتهاء لحل مشكلة التشغيل مرة واحدة
           s.unloadAsync();
           setSound(null);
         }
@@ -131,7 +129,6 @@ const ap = StyleSheet.create({
   rateBtn: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, marginLeft: 4 },
 });
 
-// ── مؤشر تسجيل ─────────────────────────────────────────────────
 function RecordingIndicator({ seconds }) {
   const pulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -163,7 +160,6 @@ const ri = StyleSheet.create({
   hint: { color: '#f44336', fontSize: 11, opacity: 0.7 },
 });
 
-// ── الشاشة الرئيسية ────────────────────────────────────────────
 export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role, requestName, localRequests, onToast }) {
   const { theme } = useTheme();
   const [messages, setMessages] = useState([]);
@@ -177,8 +173,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const [activeTab, setActiveTab] = useState(null);
   const [selectedImg, setSelectedImg] = useState(null);
   const [imgModalVisible, setImgModalVisible] = useState(false);
-
-  // ✅ التعديل 1 - إضافة autoScroll state
   const [autoScroll, setAutoScroll] = useState(true);
 
   const listRef = useRef(null);
@@ -237,7 +231,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     startListen(chatId, pid);
   };
 
-  // ✅ التعديل 2 - startListen مع firstLoad
   const startListen = (cId, pid) => {
     if (msgRef.current) msgRef.current();
     if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0);
@@ -273,11 +266,14 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     });
   };
 
+  // ✅ التصحيح الرئيسي - token بدل to
   const triggerNotification = async (title, body) => {
     try {
       let targetUid = activePid;
       if (role === 'pharmacy') {
-        targetUid = isDirectChat ? chatId.split('_')[1] : (localRequests?.find(r => r.id === chatId)?.patientId || activePid);
+        targetUid = isDirectChat
+          ? chatId.split('_')[1]
+          : (localRequests?.find(r => r.id === chatId)?.patientId || activePid);
       }
       const userSnap = await db.ref(`users/${targetUid}`).once('value');
       const targetToken = userSnap.val()?.fcmToken;
@@ -285,7 +281,11 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       await fetch('https://vercel-api-five-omega.vercel.app/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: targetToken, sound: 'default', title, body, data: { chatId } }),
+        body: JSON.stringify({
+          token: targetToken,  // ✅ تم التصحيح من "to" إلى "token"
+          title,
+          body,
+        }),
       });
     } catch (e) { console.log('فشل الإشعار:', e); }
   };
@@ -401,8 +401,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       )}
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={80}>
-
-        {/* ✅ التعديل 3 - FlatList مع التمرير الذكي */}
         <FlatList
           ref={listRef}
           data={messages}
@@ -410,19 +408,13 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           style={[st.msgList, { backgroundColor: theme.chatBg }]}
           contentContainerStyle={{ padding: 14, paddingBottom: 20 }}
           onContentSizeChange={() => {
-            if (autoScroll) {
-              listRef.current?.scrollToEnd({ animated: false });
-            }
+            if (autoScroll) listRef.current?.scrollToEnd({ animated: false });
           }}
-          onScrollBeginDrag={() => {
-            setAutoScroll(false);
-          }}
+          onScrollBeginDrag={() => setAutoScroll(false)}
           onScroll={(e) => {
             const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
             const isAtBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 60;
-            if (isAtBottom) {
-              setAutoScroll(true);
-            }
+            if (isAtBottom) setAutoScroll(true);
           }}
           scrollEventThrottle={100}
           renderItem={({ item }) => {
@@ -438,9 +430,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                       <Image source={{ uri: item.image }} style={st.msgImg} resizeMode="cover" />
                     </TouchableOpacity>
                   )}
-                  {item.audio && (
-                    <AudioPlayer uri={item.audio} isMe={isMe} />
-                  )}
+                  {item.audio && <AudioPlayer uri={item.audio} isMe={isMe} />}
                   {item.locationUrl && (
                     <TouchableOpacity onPress={() => Linking.openURL(item.locationUrl)} style={st.locBubble}>
                       <Text style={{ color: '#00796b', fontWeight: 'bold' }}>📍 عرض الموقع على الخريطة</Text>
