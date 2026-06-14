@@ -33,12 +33,16 @@
     },
     "plugins": [
       "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
       [
         "expo-notifications",
         {
           "icon": "./assets/adaptive-icon.png",
           "color": "#00796b",
-          "defaultChannel": "default"
+          "defaultChannel": "default",
+          "androidManifest": {
+            "tools:replace": "android:value,android:resource"
+          }
         }
       ],
       [
