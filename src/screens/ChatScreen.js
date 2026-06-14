@@ -1,4 +1,4 @@
-// src/screens/ChatScreen.js - مع نبضة تسجيل سناب + تحكم صوتي كامل
+// src/screens/ChatScreen.js
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList,
@@ -10,7 +10,7 @@ import * as Location from 'expo-location';
 import { db, firebaseAuth, formatLastSeen } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 
-// ── مكوّن مشغّل الصوت ──────────────────────────────────────────
+// ── مشغّل الصوت ────────────────────────────────────────────────
 function AudioPlayer({ uri, isMe }) {
   const [sound, setSound] = useState(null);
   const [playing, setPlaying] = useState(false);
@@ -29,7 +29,6 @@ function AudioPlayer({ uri, isMe }) {
   const loadAndPlay = async () => {
     try {
       if (sound) {
-        // إذا كان يعزف نوقفه وإلا نكمل
         const status = await sound.getStatusAsync();
         if (status.isPlaying) {
           await sound.pauseAsync();
@@ -56,6 +55,9 @@ function AudioPlayer({ uri, isMe }) {
           setPlaying(false);
           setPosition(0);
           clearInterval(intervalRef.current);
+          // ✅ إصلاح مشكلة الصوت - تحرير الذاكرة بعد الانتهاء
+          s.unloadAsync();
+          setSound(null);
         }
       });
     } catch (e) {
@@ -94,12 +96,9 @@ function AudioPlayer({ uri, isMe }) {
 
   return (
     <View style={[ap.wrap, { backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.07)' }]}>
-      {/* زر تشغيل/إيقاف */}
       <TouchableOpacity onPress={loadAndPlay} style={ap.playBtn}>
         <Text style={{ fontSize: 18 }}>{playing ? '⏸' : '▶️'}</Text>
       </TouchableOpacity>
-
-      {/* شريط التقدم */}
       <View style={{ flex: 1, marginHorizontal: 8 }}>
         <View style={ap.bar}>
           <View style={[ap.fill, { width: `${progress * 100}%` }]} />
@@ -109,16 +108,12 @@ function AudioPlayer({ uri, isMe }) {
           <Text style={[ap.time, { color: isMe ? 'rgba(255,255,255,0.8)' : '#555' }]}>{fmtTime(duration)}</Text>
         </View>
       </View>
-
-      {/* تقديم/تأخير */}
       <TouchableOpacity onPress={() => seek(-1)} style={ap.skipBtn}>
         <Text style={{ fontSize: 13, color: isMe ? 'white' : '#333' }}>↩5</Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={() => seek(1)} style={ap.skipBtn}>
         <Text style={{ fontSize: 13, color: isMe ? 'white' : '#333' }}>5↪</Text>
       </TouchableOpacity>
-
-      {/* سرعة التشغيل */}
       <TouchableOpacity onPress={toggleRate} style={[ap.rateBtn, { borderColor: isMe ? 'rgba(255,255,255,0.5)' : '#aaa' }]}>
         <Text style={{ fontSize: 11, fontWeight: 'bold', color: isMe ? 'white' : '#333' }}>{rate}×</Text>
       </TouchableOpacity>
@@ -136,7 +131,7 @@ const ap = StyleSheet.create({
   rateBtn: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, marginLeft: 4 },
 });
 
-// ── مؤشر تسجيل مثل سناب ────────────────────────────────────────
+// ── مؤشر التسجيل ───────────────────────────────────────────────
 function RecordingIndicator({ seconds }) {
   const pulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -182,11 +177,14 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const [activeTab, setActiveTab] = useState(null);
   const [selectedImg, setSelectedImg] = useState(null);
   const [imgModalVisible, setImgModalVisible] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
 
   const listRef = useRef(null);
   const slideAnim = useRef(new Animated.Value(700)).current;
   const msgRef = useRef(null);
   const recTimerRef = useRef(null);
+  // ✅ إصلاح 3 - ref لمستمع الحالة
+  const presenceRef = useRef(null);
 
   const activePid = role === 'pharmacy' ? firebaseAuth.currentUser?.uid : (activeTab || pharmacyId);
   const isDirectChat = chatId?.startsWith('p_');
@@ -198,7 +196,14 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       if (role === 'patient' && !isDirectChat) loadTabs();
       else startListen(chatId, role === 'pharmacy' ? firebaseAuth.currentUser?.uid : pharmacyId);
     }
-    return () => { if (msgRef.current) msgRef.current(); };
+    return () => {
+      if (msgRef.current) msgRef.current();
+      // ✅ إصلاح 3 - تنظيف مستمع الحالة
+      if (presenceRef.current) {
+        presenceRef.current.off('value');
+        presenceRef.current = null;
+      }
+    };
   }, [visible, chatId]);
 
   useEffect(() => {
@@ -211,11 +216,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     return () => backHandler.remove();
   }, [visible, imgModalVisible]);
 
-  // تنظيف مؤقت التسجيل عند الخروج
   useEffect(() => {
-    if (!visible && isRecording) {
-      stopRecordingAndSend(false); // إلغاء بدون إرسال
-    }
+    if (!visible && isRecording) stopRecordingAndSend(false);
   }, [visible]);
 
   const loadTabs = async () => {
@@ -226,7 +228,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     snap.forEach(c => {
       if (!['unreadPharmacy', 'unreadPatient'].includes(c.key)) {
         ids.push(c.key);
-        ps.push(db.ref(`users/${c.key}`).once('value').then(s => { names[c.key] = s.val()?.pharmacyName || `صيدلية(${c.key.slice(0, 5)})`; }));
+        ps.push(db.ref(`users/${c.key}`).once('value').then(s => {
+          names[c.key] = s.val()?.pharmacyName || `صيدلية(${c.key.slice(0, 5)})`;
+        }));
       }
     });
     await Promise.all(ps);
@@ -242,23 +246,48 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   const startListen = (cId, pid) => {
     if (msgRef.current) msgRef.current();
+
     if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0);
     else db.ref(`chats/${cId}/${pid}/unreadPatient`).set(0);
 
     const ref = db.ref(`chats/${cId}/${pid}/messages`);
+    let firstLoad = true;
+
     const listener = ref.on('value', snap => {
-      let arr = [];
+      const arr = [];
       if (snap.exists()) snap.forEach(c => arr.push({ id: c.key, ...c.val() }));
-      setMessages(arr);
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
+      setMessages(prev => {
+        const isNewMsg = prev.length > 0 && arr.length > prev.length;
+        if (firstLoad || isNewMsg) {
+          setAutoScroll(true);
+          setTimeout(() => listRef.current?.scrollToEnd({ animated: !firstLoad }), 80);
+          firstLoad = false;
+        }
+        return arr;
+      });
     });
+
     msgRef.current = () => ref.off('value', listener);
 
+    // ✅ إصلاح 3 - تنظيف المستمع القديم قبل إنشاء جديد
+    if (presenceRef.current) {
+      presenceRef.current.off('value');
+      presenceRef.current = null;
+    }
+
+    // ✅ إصلاح presence - تحديد الهدف الصحيح
     let target = pid;
     if (role === 'pharmacy') {
-      target = isDirectChat ? cId.split('_')[1] : (localRequests?.find(r => r.id === cId)?.patientId || pid);
+      target = isDirectChat
+        ? cId.split('_')[1]
+        : (localRequests?.find(r => r.id === cId)?.patientId || pid);
+    } else {
+      target = isDirectChat ? cId.split('_')[2] : pid;
     }
-    db.ref(`users/${target}/presence`).on('value', s => {
+
+    const pRef = db.ref(`users/${target}/presence`);
+    presenceRef.current = pRef;
+    pRef.on('value', s => {
       const d = s.val();
       setUserStatus(d?.online === true ? '🟢 متصل الآن' : `🕒 ${formatLastSeen(d?.lastSeen)}`);
     });
@@ -268,15 +297,19 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     try {
       let targetUid = activePid;
       if (role === 'pharmacy') {
-        targetUid = isDirectChat ? chatId.split('_')[1] : (localRequests?.find(r => r.id === chatId)?.patientId || activePid);
+        targetUid = isDirectChat
+          ? chatId.split('_')[1]
+          : (localRequests?.find(r => r.id === chatId)?.patientId || activePid);
       }
       const userSnap = await db.ref(`users/${targetUid}`).once('value');
-      const targetToken = userSnap.val()?.fcmToken;
+      // ✅ إصلاح 1 - fcm_token بدل fcmToken
+      const targetToken = userSnap.val()?.fcm_token;
       if (!targetToken) return;
       await fetch('https://vercel-api-five-omega.vercel.app/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: targetToken, sound: 'default', title, body, data: { chatId } }),
+        // ✅ إصلاح 2 - token بدل to
+        body: JSON.stringify({ token: targetToken, title, body, data: { chatId } }),
       });
     } catch (e) { console.log('فشل الإشعار:', e); }
   };
@@ -306,7 +339,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     }
   };
 
-  // ── بدء التسجيل (ضغط) ──────────────────────────────────────
   const startRecording = async () => {
     const { status } = await Audio.requestPermissionsAsync();
     if (status !== 'granted') return onToast('يرجى السماح باستخدام الميكروفون', 'error');
@@ -315,11 +347,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     setRecording(rec);
     setIsRecording(true);
     setRecSeconds(0);
-    // مؤقت العداد
     recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
   };
 
-  // ── إيقاف وإرسال (رفع الإصبع) ─────────────────────────────
   const stopRecordingAndSend = async (doSend = true) => {
     clearInterval(recTimerRef.current);
     setIsRecording(false);
@@ -375,7 +405,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           <Text style={st.headerTitle} numberOfLines={1}>{requestName || 'المحادثة'}</Text>
           <Text style={st.statusTxt}>{userStatus}</Text>
         </View>
-        <TouchableOpacity onPress={onClose}><Text style={{ color: 'white', fontSize: 28, fontWeight: 'bold' }}>×</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onClose}>
+          <Text style={{ color: 'white', fontSize: 28, fontWeight: 'bold' }}>×</Text>
+        </TouchableOpacity>
       </View>
 
       {role === 'patient' && tabs.length > 0 && (
@@ -396,32 +428,34 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         <FlatList
           ref={listRef}
           data={messages}
-          keyExtractor={i => i.id || String(Math.random())}
+          // ✅ إصلاح 4 - index بدل Math.random
+          keyExtractor={(i, index) => i.id || String(index)}
           style={[st.msgList, { backgroundColor: theme.chatBg }]}
           contentContainerStyle={{ padding: 14, paddingBottom: 20 }}
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={() => {
+            if (autoScroll) listRef.current?.scrollToEnd({ animated: false });
+          }}
+          onScrollBeginDrag={() => setAutoScroll(false)}
+          onScroll={(e) => {
+            const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+            const isAtBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 60;
+            if (isAtBottom) setAutoScroll(true);
+          }}
+          scrollEventThrottle={100}
           renderItem={({ item }) => {
             const isMe = item.role === role;
             return (
               <View style={[st.msgWrap, isMe ? { alignItems: 'flex-start' } : { alignItems: 'flex-end' }]}>
                 <View style={[st.bubble, { backgroundColor: isMe ? theme.primary : '#dcf8c6' }]}>
-                  {item.text && <Text style={[st.msgTxt, { color: isMe ? 'white' : '#333' }]}>{item.text}</Text>}
-
+                  {item.text && (
+                    <Text style={[st.msgTxt, { color: isMe ? 'white' : '#333' }]}>{item.text}</Text>
+                  )}
                   {item.image && (
                     <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
-                      <Image
-                        source={{ uri: item.image }}
-                        style={st.msgImg}
-                        resizeMode="cover"
-                      />
+                      <Image source={{ uri: item.image }} style={st.msgImg} resizeMode="cover" />
                     </TouchableOpacity>
                   )}
-
-                  {/* 🔴 مشغل صوتي كامل بدلاً من زر بسيط */}
-                  {item.audio && (
-                    <AudioPlayer uri={item.audio} isMe={isMe} />
-                  )}
-
+                  {item.audio && <AudioPlayer uri={item.audio} isMe={isMe} />}
                   {item.locationUrl && (
                     <TouchableOpacity onPress={() => Linking.openURL(item.locationUrl)} style={st.locBubble}>
                       <Text style={{ color: '#00796b', fontWeight: 'bold' }}>📍 عرض الموقع على الخريطة</Text>
@@ -451,11 +485,10 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           </ScrollView>
         )}
 
-        {/* شريط الإدخال */}
         <View style={[st.inputArea, { backgroundColor: theme.cardBg, borderTopColor: theme.border }]}>
-          <TouchableOpacity onPress={sendImage} style={st.iconBtn}><Text style={{ fontSize: 21 }}>📷</Text></TouchableOpacity>
-
-          {/* زر التسجيل - اضغط وأمسك */}
+          <TouchableOpacity onPress={sendImage} style={st.iconBtn}>
+            <Text style={{ fontSize: 21 }}>📷</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             onPressIn={startRecording}
             onPressOut={() => stopRecordingAndSend(true)}
@@ -466,7 +499,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           </TouchableOpacity>
 
           {isRecording ? (
-            // مؤشر التسجيل يحل محل حقل النص
             <View style={{ flex: 1 }}>
               <RecordingIndicator seconds={recSeconds} />
             </View>
@@ -487,7 +519,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         </View>
       </KeyboardAvoidingView>
 
-      {/* نافذة تكبير الصورة */}
       <Modal visible={imgModalVisible} transparent animationType="fade">
         <View style={st.modalBackground}>
           <TouchableOpacity style={st.closeImgBtn} onPress={() => { setImgModalVisible(false); setSelectedImg(null); }}>
