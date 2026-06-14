@@ -9,6 +9,7 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
   const slideAnim = useRef(new Animated.Value(700)).current;
   const [chats, setChats] = useState([]);
   const listenerRef = useRef(null);
+  const chatsRefStore = useRef(null); // ✅ إضافة ref للمرجع
 
   useEffect(() => {
     Animated.timing(slideAnim, { toValue: visible ? 0 : 700, duration: 300, useNativeDriver: true }).start();
@@ -18,7 +19,10 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
     if (!visible) return;
     const uid = firebaseAuth.currentUser?.uid;
     if (!uid) return;
+
     const ref = db.ref('chats');
+    chatsRefStore.current = ref; // ✅ حفظ المرجع
+
     listenerRef.current = ref.on('value', async snap => {
       if (!snap.exists()) { setChats([]); return; }
       let arr = [];
@@ -41,11 +45,10 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
           ? (data.unreadPharmacy || 0)
           : (data.unreadPatient || 0);
 
-        // استخراج ID الطرف الآخر
         const parts = id.split('_');
         const otherUserId = role === 'pharmacy'
-          ? (parts[1] || '')      // المريض
-          : (parts[2] || '');     // الصيدلية
+          ? (parts[1] || '')
+          : (parts[2] || '');
 
         const entry = { id, preview, unread, otherUserId, otherName: null };
         arr.push(entry);
@@ -65,7 +68,15 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
       await Promise.all(ps);
       setChats([...arr]);
     });
-    return () => ref.off('value', listenerRef.current);
+
+    // ✅ تنظيف صحيح
+    return () => {
+      if (chatsRefStore.current && listenerRef.current) {
+        chatsRefStore.current.off('value', listenerRef.current);
+        listenerRef.current = null;
+        chatsRefStore.current = null;
+      }
+    };
   }, [visible]);
 
   if (!visible) return null;
