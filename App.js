@@ -82,6 +82,41 @@ function AppContent() {
     return () => backHandler.remove();
   }, []);
 
+  // 🕒 آلية الحذف التلقائي للطلبات/المحادثات التي مر عليها 48 ساعة
+  useEffect(() => {
+    if (!user) return;
+
+    // 48 ساعة بالملي ثانية = 48 * 60 * 60 * 1000 = 172800000
+    const FORTY_EIGHT_HOURS = 172800000;
+    const expirationLimit = Date.now() - FORTY_EIGHT_HOURS;
+
+    // فحص مسار المحادثات (chats) وحذف القديم منها
+    const chatsRef = db.ref('chats');
+    
+    // نقوم بالقراءة لمرة واحدة عند فتح التطبيق لتنظيف قاعدة البيانات ومسح الفائض
+    chatsRef.once('value').then(snapshot => {
+      if (snapshot.exists()) {
+        snapshot.forEach(childSnapshot => {
+          const chatIdKey = childSnapshot.key;
+          const chatData = childSnapshot.val();
+          
+          // نبحث عن حقل الطابع الزمني للطلب (createdAt)
+          if (chatData && chatData.createdAt) {
+            if (chatData.createdAt < expirationLimit) {
+              // إذا كان عمر الطلب أكثر من 48 ساعة، يتم حذفه نهائياً من فايربيس
+              db.ref(`chats/${chatIdKey}`).remove()
+                .then(() => {
+                  console.log(`تم حذف المحادثة المنتهية: ${chatIdKey}`);
+                })
+                .catch(err => console.log("خطأ في الحذف تلقائياً:", err));
+            }
+          }
+        });
+      }
+    });
+
+  }, [user]);
+
   useEffect(() => {
     return firebaseAuth.onAuthStateChanged(u => {
       if (u) {
@@ -249,7 +284,7 @@ function AppContent() {
         visible={nearbyOpen} onClose={() => setNearbyOpen(false)}
         province={province} onDirectChat={openDirectChat}
       />
-      {/* ✅ التغيير 2 - InboxScreen الصيدلية مع role */}
+      {/* ✅ InboxScreen الصيدلية */}
       <InboxScreen
         visible={inboxOpen}
         onClose={() => setInboxOpen(false)}
@@ -262,10 +297,7 @@ function AppContent() {
           setChatOpen(true);
         }}
       />
-      {/* ✅ التغيير 2 - InboxScreen المريض */}
-      {/* 🔧 إصلاح: استخراج ID الصيدلية من معرف المحادثة (p_{patientId}_{pharmacyId})
-          بدلاً من تمرير null، لأن ChatScreen يحتاج pharmacyId الصحيح حتى يقرأ
-          ويكتب على المسار الصحيح في قاعدة البيانات: chats/{chatId}/{pharmacyId}/... */}
+      {/* ✅ InboxScreen المريض */}
       <InboxScreen
         visible={patientInboxOpen}
         onClose={() => setPatientInboxOpen(false)}
@@ -274,7 +306,7 @@ function AppContent() {
           setPatientInboxOpen(false);
           setChatId(cid);
           setChatName('محادثة مع الصيدلية');
-          setChatPid(cid.split('_')[2] || null); // ✅ الإصلاح
+          setChatPid(cid.split('_')[2] || null);
           setChatOpen(true);
         }}
       />
