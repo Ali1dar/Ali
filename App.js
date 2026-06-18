@@ -263,6 +263,9 @@ function AppContent() {
         }}
       />
       {/* ✅ التغيير 2 - InboxScreen المريض */}
+      {/* 🔧 إصلاح: استخراج ID الصيدلية من معرف المحادثة (p_{patientId}_{pharmacyId})
+          بدلاً من تمرير null، لأن ChatScreen يحتاج pharmacyId الصحيح حتى يقرأ
+          ويكتب على المسار الصحيح في قاعدة البيانات: chats/{chatId}/{pharmacyId}/... */}
       <InboxScreen
         visible={patientInboxOpen}
         onClose={() => setPatientInboxOpen(false)}
@@ -271,7 +274,7 @@ function AppContent() {
           setPatientInboxOpen(false);
           setChatId(cid);
           setChatName('محادثة مع الصيدلية');
-          setChatPid(null);
+          setChatPid(cid.split('_')[2] || null); // ✅ الإصلاح
           setChatOpen(true);
         }}
       />
