@@ -28,7 +28,18 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
         const id = child.key;
         if (!id.includes(uid)) return;
 
-        const data = child.val()[uid] || {};
+        // استخراج ID الطرف الآخر
+        const parts = id.split('_');
+        const otherUserId = role === 'pharmacy'
+          ? (parts[1] || '')      // المريض
+          : (parts[2] || '');     // الصيدلية
+
+        // 🔧 إصلاح: المفتاح داخل chats/{id} يكون دائماً ID الصيدلية
+        // (لأن ChatScreen يكتب الرسائل تحت chats/{chatId}/{pharmacyId}/...)
+        // لذلك عند المريض يجب القراءة من otherUserId (ID الصيدلية) وليس من uid (ID المريض نفسه)
+        const branchKey = role === 'pharmacy' ? uid : otherUserId;
+        const data = child.val()[branchKey] || {};
+
         const msgs = data.messages ? Object.values(data.messages) : [];
         const last = msgs[msgs.length - 1];
 
@@ -40,12 +51,6 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
         const unread = role === 'pharmacy'
           ? (data.unreadPharmacy || 0)
           : (data.unreadPatient || 0);
-
-        // استخراج ID الطرف الآخر
-        const parts = id.split('_');
-        const otherUserId = role === 'pharmacy'
-          ? (parts[1] || '')      // المريض
-          : (parts[2] || '');     // الصيدلية
 
         const entry = { id, preview, unread, otherUserId, otherName: null };
         arr.push(entry);
