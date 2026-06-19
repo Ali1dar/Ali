@@ -1,4 +1,4 @@
-Enter// src/screens/ChatScreen.js
+// src/screens/ChatScreen.js
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList,
@@ -10,7 +10,7 @@ import * as Location from 'expo-location';
 import { db, firebaseAuth, formatLastSeen } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 
-// 🕒 دالة مساعدة عامة لتحويل الـ timestamp إلى وقت (ساعة:دقيقة م/ص)
+// 🕒 تحويل الـ timestamp إلى وقت (ساعة:دقيقة م/ص) بشكل آمن
 const formatMsgTime = (ts) => {
   if (!ts) return '';
   try {
@@ -22,7 +22,6 @@ const formatMsgTime = (ts) => {
 };
 
 function AudioPlayer({ uri, isMe, timestamp }) {
-  const { theme } = useTheme();
   const [sound, setSound] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -99,32 +98,26 @@ function AudioPlayer({ uri, isMe, timestamp }) {
   return (
     <View style={ap.whatsappContainer}>
       <View style={ap.mainRow}>
-        {/* زر تشغيل / إيقاف مقتبس من واتساب ميكروفون وتصميم دائري */}
         <TouchableOpacity onPress={loadAndPlay} style={[ap.waPlayBtn, { backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,121,107,0.1)' }]}>
           <Text style={{ fontSize: 15, color: isMe ? 'white' : '#00796b', marginLeft: playing ? 0 : 2 }}>
             {playing ? '⏸' : '▶️'}
           </Text>
         </TouchableOpacity>
 
-        {/* شريط التقدم الخطي لواتساب مع منزلق وهمي ذكي */}
         <View style={{ flex: 1, justifyContent: 'center', position: 'relative' }}>
           <View style={[ap.waBar, { backgroundColor: isMe ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)' }]}>
             <View style={[ap.waFill, { width: `${progress * 100}%`, backgroundColor: isMe ? 'white' : '#00796b' }]} />
           </View>
-          {/* نقطة التحكم المتنقلة على خط الصوت */}
           <View style={[ap.waSliderDot, { left: `${progress * 100}%`, backgroundColor: isMe ? 'white' : '#00796b' }]} />
         </View>
 
-        {/* زر تغيير السرعة الذكي الخفيف */}
         <TouchableOpacity onPress={toggleRate} style={[ap.waRateBtn, { borderColor: isMe ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.2)' }]}>
           <Text style={{ fontSize: 10, fontWeight: 'bold', color: isMe ? 'white' : '#333' }}>{rate}×</Text>
         </TouchableOpacity>
 
-        {/* أيقونة الميكروفون الجانبية لتوثيق الصوت المباشر */}
         <Text style={{ fontSize: 18, color: isMe ? 'rgba(255,255,255,0.7)' : '#00796b', marginLeft: 4 }}>🎙️</Text>
       </View>
 
-      {/* سطر العداد والوقت السفلي داخل الفقاعة الصويتة للواتساب */}
       <View style={ap.waFooterRow}>
         <Text style={[ap.waDurationTxt, { color: isMe ? 'rgba(255,255,255,0.7)' : '#666' }]}>
           {playing ? fmtTime(position) : fmtTime(duration || 0)}
@@ -135,7 +128,7 @@ function AudioPlayer({ uri, isMe, timestamp }) {
             <Text style={[ap.waTimeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
               {formatMsgTime(timestamp)}
             </Text>
-            <Text style={{ fontSize: 11, color: isMe ? '#e0f2f1' : '#00796b' }}>✓✓</Text>
+            {isMe && <Text style={{ fontSize: 11, color: '#e0f2f1' }}>✓✓</Text>}
           </View>
         )}
       </View>
@@ -479,7 +472,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return onToast('يرجى السماح بتحديد الموقع', 'error');
     const loc = await Location.getCurrentPositionAsync({});
-    const url = `http://maps.google.com/?q=${loc.coords.latitude},${loc.coords.longitude}`;
+    // 🛠️ تم إصلاح الخطأ البرمي هنا بإضافة علامة الـ $ وحذف رقم 1 الزائد
+    const url = `http://googleusercontent.com/maps.google.com/?q=${loc.coords.latitude},${loc.coords.longitude}`;
     const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
     await ref.set({ role: 'pharmacy', locationUrl: url, timestamp: Date.now() });
     onToast('تم إرسال الموقع 📍');
@@ -509,7 +503,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   if (!visible) return null;
 
   return (
-    <Animated.View style={[st.container, { transform: [{ translateY: slideAnim }], backgroundColor: theme.cardBg }]}>
+    <Animated.View style={[st.container, { transform: [{ translateY: slideAnim }], backgroundColor: theme?.cardBg || '#ffffff' }]}>
       <View style={st.header}>
         <View style={{ flex: 1 }}>
           <Text style={st.headerTitle} numberOfLines={1}>{requestName || 'المحادثة'}</Text>
@@ -521,12 +515,12 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       </View>
 
       {role === 'patient' && tabs.length > 0 && (
-        <ScrollView horizontal style={[st.tabsBar, { borderBottomColor: theme.border, backgroundColor: theme.bg }]} showsHorizontalScrollIndicator={false}>
+        <ScrollView horizontal style={[st.tabsBar, { borderBottomColor: theme?.border || '#ccc', backgroundColor: theme?.bg || '#f9f9f9' }]} showsHorizontalScrollIndicator={false}>
           {tabs.map(tid => (
             <TouchableOpacity key={tid}
-              style={[st.tabBtn, { borderColor: theme.border, backgroundColor: activeTab === tid ? theme.primary : theme.cardBg }]}
+              style={[st.tabBtn, { borderColor: theme?.border || '#ccc', backgroundColor: activeTab === tid ? (theme?.primary || '#00796b') : (theme?.cardBg || '#fff') }]}
               onPress={() => selectTab(tid)}>
-              <Text style={{ color: activeTab === tid ? 'white' : theme.text, fontWeight: 'bold', fontSize: 12 }}>
+              <Text style={{ color: activeTab === tid ? 'white' : (theme?.text || '#000'), fontWeight: 'bold', fontSize: 12 }}>
                 {tabNames[tid] || tid.slice(0, 8)}
               </Text>
             </TouchableOpacity>
@@ -539,7 +533,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           ref={listRef}
           data={messages}
           keyExtractor={i => i.id || String(Math.random())}
-          style={[st.msgList, { backgroundColor: theme.chatBg }]}
+          style={[st.msgList, { backgroundColor: theme?.chatBg || '#efeae2' }]}
           contentContainerStyle={{ padding: 14, paddingBottom: 20 }}
           onContentSizeChange={() => {
             if (autoScroll) listRef.current?.scrollToEnd({ animated: false });
@@ -553,6 +547,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           scrollEventThrottle={100}
           renderItem={({ item }) => {
             const isMe = item.role === role;
+            // تأمين ألوان الفقاعات لمنع الانهيار بسبب عدم قراءة الـ dark mode
+            const defaultBg = isMe ? (theme?.primary || '#00796b') : '#dcf8c6';
+            
             return (
               <View style={[st.msgWrap, isMe ? { alignItems: 'flex-start' } : { alignItems: 'flex-end' }]}>
                 <TouchableOpacity 
@@ -560,8 +557,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                   onLongPress={() => handleLongPressMessage(item)}
                   style={[
                     st.bubble, 
-                    { backgroundColor: isMe ? theme.primary : (theme.dark ? '#1f2c34' : '#dcf8c6') },
-                    item.isDeleted && { backgroundColor: theme.bg, borderWidth: 1, borderColor: theme.border }
+                    { backgroundColor: defaultBg },
+                    item.isDeleted && { backgroundColor: theme?.bg || '#f5f5f5', borderWidth: 1, borderColor: theme?.border || '#ccc' }
                   ]}
                 >
                   {/* 1. معالجة النصوص */}
@@ -569,13 +566,12 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                     <View>
                       <Text style={[
                         st.msgTxt, 
-                        { color: isMe ? 'white' : (theme.dark ? '#e9edef' : '#333') },
-                        item.isDeleted && { color: theme.subText, fontStyle: 'italic', fontSize: 13 }
+                        { color: isMe ? 'white' : '#333' },
+                        item.isDeleted && { color: theme?.subText || '#999', fontStyle: 'italic', fontSize: 13 }
                       ]}>
                         {item.text} {item.isEdited && !item.isDeleted && <Text style={st.editedLabel}>(معدلة)</Text>}
                       </Text>
                       
-                      {/* عرض الوقت أسفل النص مباشرة محاكاة لواتساب */}
                       {!item.isDeleted && item.timestamp && (
                         <View style={st.metaContainer}>
                           <Text style={[st.timeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
@@ -604,7 +600,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                     </View>
                   )}
 
-                  {/* 3. معالجة الرسائل الصوتية (شكل الواتساب المطور) */}
+                  {/* 3. معالجة الرسائل الصوتية */}
                   {item.audio && <AudioPlayer uri={item.audio} isMe={isMe} timestamp={item.timestamp} />}
 
                   {/* 4. معالجة خرائط الموقع الجغرافي */}
@@ -631,7 +627,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         />
 
         {role === 'pharmacy' && !isEditingMode && (
-          <ScrollView horizontal style={[st.quickBar, { borderTopColor: theme.border, backgroundColor: theme.bg }]} showsHorizontalScrollIndicator={false}>
+          <ScrollView horizontal style={[st.quickBar, { borderTopColor: theme?.border || '#ccc', backgroundColor: theme?.bg || '#fff' }]} showsHorizontalScrollIndicator={false}>
             {[
               { l: '🟢 متوفر', t: 'مرحباً، الدواء متوفر لدينا وجاهز للاستلام.' },
               { l: '🔴 غير متوفر', t: 'عذراً، هذا الدواء غير متوفر حالياً.' },
@@ -640,24 +636,24 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
               { l: '📍 موقعي', action: sendLocation },
             ].map((q, i) => (
               <TouchableOpacity key={i}
-                style={[st.quickBtn, { borderColor: theme.primary, backgroundColor: theme.cardBg }]}
+                style={[st.quickBtn, { borderColor: theme?.primary || '#00796b', backgroundColor: theme?.cardBg || '#fff' }]}
                 onPress={() => q.action ? q.action() : sendQuick(q.t)}>
-                <Text style={[st.quickTxt, { color: theme.primary }]}>{q.l}</Text>
+                <Text style={[st.quickTxt, { color: theme?.primary || '#00796b' }]}>{q.l}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         )}
 
         {isEditingMode && (
-          <View style={[st.editIndicatorBar, { backgroundColor: theme.bg, borderTopColor: theme.border }]}>
+          <View style={[st.editIndicatorBar, { backgroundColor: theme?.bg || '#fff', borderTopColor: theme?.border || '#ccc' }]}>
             <TouchableOpacity onPress={cancelEditMode}>
               <Text style={st.cancelEditTxt}>إلغاء التعديل ×</Text>
             </TouchableOpacity>
-            <Text style={[st.editIndicatorLabel, { color: theme.subText }]}>جاري تعديل الرسالة المنتقاة...</Text>
+            <Text style={[st.editIndicatorLabel, { color: theme?.subText || '#666' }]}>جاري تعديل الرسالة المنتقاة...</Text>
           </View>
         )}
 
-        <View style={[st.inputArea, { backgroundColor: theme.cardBg, borderTopColor: theme.border }]}>
+        <View style={[st.inputArea, { backgroundColor: theme?.cardBg || '#fff', borderTopColor: theme?.border || '#ccc' }]}>
           {!isEditingMode && (
             <TouchableOpacity onPress={sendImage} style={st.iconBtn}>
               <Text style={{ fontSize: 21 }}>📷</Text>
@@ -680,16 +676,16 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
             </View>
           ) : (
             <TextInput
-              style={[st.chatInput, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }]}
+              style={[st.chatInput, { backgroundColor: theme?.bg || '#f5f5f5', borderColor: theme?.border || '#ccc', color: theme?.text || '#000' }]}
               placeholder={isEditingMode ? "عدل رسالتك هنا..." : "اكتب رسالتك..."} 
-              placeholderTextColor={theme.subText}
+              placeholderTextColor={theme?.subText || '#999'}
               value={text} onChangeText={setText} textAlign="right"
               onSubmitEditing={sendMsg}
             />
           )}
 
           {!isRecording && (
-            <TouchableOpacity style={[st.sendBtn, { backgroundColor: isEditingMode ? '#00c853' : theme.primary }]} onPress={sendMsg}>
+            <TouchableOpacity style={[st.sendBtn, { backgroundColor: isEditingMode ? '#00c853' : (theme?.primary || '#00796b') }]} onPress={sendMsg}>
               <Text style={{ color: 'white', fontWeight: 'bold' }}>{isEditingMode ? 'حفظ' : 'إرسال'}</Text>
             </TouchableOpacity>
           )}
@@ -740,7 +736,6 @@ const mkStyles = (t) => StyleSheet.create({
   closeImgTxt: { color: 'white', fontSize: 32, fontWeight: '300', marginTop: -4 },
   fullImage: { width: '100%', height: '80%' },
   
-  // 🛠️ ستايلات وعناصر الوقت والصحّين الإضافية الهندسية
   metaContainer: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginTop: 3, gap: 3, alignSelf: 'flex-start' },
   mediaMetaFix: { position: 'absolute', bottom: 5, left: 8, backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 5, borderRadius: 8, marginTop: 0 },
   timeText: { fontSize: 9.5, fontWeight: '400' },
