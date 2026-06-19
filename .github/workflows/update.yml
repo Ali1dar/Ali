@@ -1,4 +1,4 @@
-herename: Deploy OTA Update to Expo
+name: Deploy OTA Update to Expo
 
 on:
   push:
