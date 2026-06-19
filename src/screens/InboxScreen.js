@@ -10,6 +10,17 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
   const [chats, setChats] = useState([]);
   const listenerRef = useRef(null);
 
+  // دالة مساعدة لتنسيق الوقت بشكل مقروء
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      return '';
+    }
+  };
+
   useEffect(() => {
     Animated.timing(slideAnim, { toValue: visible ? 0 : 700, duration: 300, useNativeDriver: true }).start();
   }, [visible]);
@@ -35,8 +46,6 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
           : (parts[2] || '');     // الصيدلية
 
         // 🔧 إصلاح: المفتاح داخل chats/{id} يكون دائماً ID الصيدلية
-        // (لأن ChatScreen يكتب الرسائل تحت chats/{chatId}/{pharmacyId}/...)
-        // لذلك عند المريض يجب القراءة من otherUserId (ID الصيدلية) وليس من uid (ID المريض نفسه)
         const branchKey = role === 'pharmacy' ? uid : otherUserId;
         const data = child.val()[branchKey] || {};
 
@@ -48,11 +57,14 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
         else if (last?.image) preview = '🖼️ صورة';
         else if (last?.audio) preview = '🎙️ رسالة صوتية';
 
+        // 🕒 جلب وقت آخر رسالة وضبطه للطرفين
+        const lastTime = last?.createdAt || last?.timestamp || null;
+
         const unread = role === 'pharmacy'
           ? (data.unreadPharmacy || 0)
           : (data.unreadPatient || 0);
 
-        const entry = { id, preview, unread, otherUserId, otherName: null };
+        const entry = { id, preview, unread, otherUserId, otherName: null, lastTime };
         arr.push(entry);
 
         if (otherUserId) {
@@ -68,6 +80,10 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
       });
 
       await Promise.all(ps);
+      
+      // ترتيب المحادثات بحيث تظهر الأحدث دائماً في الأعلى
+      arr.sort((a, b) => (b.lastTime || 0) - (a.lastTime || 0));
+      
       setChats([...arr]);
     });
     return () => ref.off('value', listenerRef.current);
@@ -103,9 +119,17 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
                 onPress={() => onOpenChat(item.id)}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={[st.name, { color: theme.primary }]}>
-                    {role === 'pharmacy' ? '👤' : '💊'} {item.otherName || 'جاري...'}
-                  </Text>
+                  {/* السطر العلوي: يحتوي على الاسم والوقت */}
+                  <View style={st.rowHeader}>
+                    <Text style={[st.time, { color: theme.subText }]}>
+                      {formatTime(item.lastTime)}
+                    </Text>
+                    <Text style={[st.name, { color: theme.primary }]}>
+                      {role === 'pharmacy' ? '👤' : '💊'} {item.otherName || 'جاري...'}
+                    </Text>
+                  </View>
+                  
+                  {/* السطر السفلي: يحتوي على نص المعاينة */}
                   <Text style={[st.preview, { color: theme.subText }]} numberOfLines={1}>
                     {item.preview}
                   </Text>
@@ -132,7 +156,9 @@ const mkStyles = (t) => StyleSheet.create({
   },
   headerTitle: { color: 'white', fontWeight: 'bold', fontSize: 18 },
   item: { padding: 14, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center' },
+  rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' },
   name: { fontWeight: 'bold', fontSize: 15, textAlign: 'right' },
+  time: { fontSize: 11, textAlign: 'left' },
   preview: { fontSize: 13, marginTop: 4, textAlign: 'right' },
   unreadBadge: {
     backgroundColor: '#e53935', borderRadius: 12,
