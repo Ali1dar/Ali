@@ -7,6 +7,24 @@ import { db, firebaseAuth, getDistanceKm } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 import ProvincePicker from '../components/ProvincePicker';
 
+// 🕒 دالة مساعدة لتحويل الطابع الزمني إلى نص مفهوم
+const getTimeAgo = (timestamp) => {
+  if (!timestamp) return 'وقت غير محدد';
+  const diff = Date.now() - timestamp;
+  const minutes = Math.floor(diff / (1000 * 60));
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(hours / 24);
+
+  if (minutes < 1) return 'الآن';
+  if (minutes < 60) return `منذ ${minutes} دقيقة`;
+  if (hours === 1) return 'منذ ساعة';
+  if (hours === 2) return 'منذ ساعتين';
+  if (hours < 24) return `منذ ${hours} ساعات`;
+  if (days === 1) return 'منذ يوم';
+  if (days === 2) return 'منذ يومين';
+  return `منذ ${days} أيام`;
+};
+
 export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, onToast, province, onProvinceChange }) {
   const { theme } = useTheme();
   const [medInput, setMedInput] = useState('');
@@ -180,7 +198,13 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
                     {item.image ? <Image source={{ uri: item.image }} style={{ width: 48, height: 48, borderRadius: 7 }} /> : null}
                     <View style={{ flex: 1 }}>
                       <Text style={[{ fontWeight: 'bold', textAlign: 'right' }, { color: theme.text }]}>{item.name}</Text>
-                      <View style={{ flexDirection: 'row', gap: 5, marginTop: 4 }}>
+                      
+                      {/* 🕒 التغيير الجديد: عرض وقت إنشاء الطلب */}
+                      <Text style={{ fontSize: 11, color: theme.subText, textAlign: 'right', marginTop: 2 }}>
+                        {getTimeAgo(item.createdAt)}
+                      </Text>
+
+                      <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, justifyContent: 'flex-end' }}>
                         <View style={{ backgroundColor: b.b, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
                           <Text style={{ color: b.c, fontSize: 11, fontWeight: 'bold' }}>{b.t}</Text>
                         </View>
