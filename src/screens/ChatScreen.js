@@ -251,12 +251,19 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     };
   }, [visible, myUid]);
 
-  // 🛠️ التعديل الجذري: تصفير كل البيانات القديمة فور تغير الـ chatId لمنع تداخل المحادثات والتابات المعلقة
+  // 🛠️ تم الإصلاح: تصفير كامل للتابات والمستمعين لمنع تعليق الصيدليات القديمة وتسريب الذاكرة
   useEffect(() => {
     Animated.timing(slideAnim, { toValue: visible ? 0 : 700, duration: 300, useNativeDriver: true }).start();
     
+    let isMounted = true;
+
+    // فصل المستمعين القدامى فوراً قبل بناء المستمع الجديد
+    if (msgRef.current) { msgRef.current(); msgRef.current = null; }
+    if (presenceRef.current) { presenceRef.current(); presenceRef.current = null; }
+    clearInterval(statusIntervalRef.current);
+
     if (visible && chatId) {
-      // 🚨 تنظيف الحالات القديمة فوراً لتجهيز الشاشة للطلب الجديد بصفحة بيضاء
+      // تصفير جذري للحالات
       setTabs([]);
       setTabNames({});
       setMessages([]);
@@ -264,15 +271,15 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       setUserStatus('جاري التحميل...');
 
       if (role === 'patient' && !isDirectChat) {
-        loadTabs();
+        loadTabs(isMounted);
       } else {
-        // في المحادثة المباشرة أو الصيدلية، نثبت تفعيل المعرف ونبدأ الاستماع
         const currentPid = role === 'pharmacy' ? myUid : pharmacyId;
         setActiveTab(currentPid);
         startListen(chatId, currentPid);
       }
     }
     return () => { 
+      isMounted = false;
       if (msgRef.current) msgRef.current(); 
       if (presenceRef.current) presenceRef.current();
       clearInterval(statusIntervalRef.current);
@@ -295,9 +302,10 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     }
   }, [visible]);
 
-  const loadTabs = async () => {
+  // 🛠️ تم الإصلاح: تمرير الـ isMounted لمنع تحديث الـ State بعد مغادرة الشاشة
+  const loadTabs = async (isMounted) => {
     const snap = await db.ref(`chats/${chatId}`).once('value');
-    if (!snap.exists()) return;
+    if (!snap.exists() || !isMounted) return;
     const ids = []; const names = {};
     const ps = [];
     snap.forEach(c => {
@@ -307,6 +315,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       }
     });
     await Promise.all(ps);
+    if (!isMounted) return;
     setTabs(ids); setTabNames(names);
     if (ids[0]) selectTab(ids[0]);
   };
@@ -388,7 +397,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       const userSnap = await db.ref(`users/${targetUid}`).once('value');
       const targetToken = userSnap.val()?.fcmToken;
       if (!targetToken) return;
-      await fetch('https://vercel-api-five-omega.vercel.app/api/notify', {
+      await fetch('[https://vercel-api-five-omega.vercel.app/api/notify](https://vercel-api-five-omega.vercel.app/api/notify)', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: targetToken, title, body }),
@@ -496,6 +505,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     }
   };
 
+  // 🛠️ تم الإصلاح: تصحيح الـ Template Literal ورابط خرائط جوجل القياسي
   const sendLocation = async () => {
     if (!chatId || !activePid) return;
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -503,7 +513,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     
     try {
       const loc = await Location.getCurrentPositionAsync({});
-      const url = `http://maps.google.com/?q=${loc.coords.latitude},${loc.coords.longitude}`;
+      const url = `https://maps.google.com/?q=${loc.coords.latitude},${loc.coords.longitude}`;
       
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
       await ref.set({ role, locationUrl: url, timestamp: Date.now(), seen: false });
