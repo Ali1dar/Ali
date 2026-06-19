@@ -7,7 +7,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
-import { db, firebaseAuth, formatLastSeen } from '../utils/firebase';
+import { db, firebaseAuth } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 
 // 🕒 تحويل الـ timestamp إلى وقت (ساعة:دقيقة م/ص) بشكل آمن
@@ -211,8 +211,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const statusIntervalRef = useRef(null);
 
   const myUid = firebaseAuth.currentUser?.uid;
-  const activePid = role === 'pharmacy' ? myUid : (activeTab || pharmacyId);
   const isDirectChat = chatId?.startsWith('p_');
+  // 💡 تحديد الـ activePid بدقة بناءً على نوع المحادثة
+  const activePid = role === 'pharmacy' ? myUid : (isDirectChat ? pharmacyId : (activeTab || pharmacyId));
   const st = mkStyles(theme);
 
   const formatTimeAgo = (timestamp) => {
@@ -254,8 +255,14 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   useEffect(() => {
     Animated.timing(slideAnim, { toValue: visible ? 0 : 700, duration: 300, useNativeDriver: true }).start();
     if (visible && chatId) {
-      if (role === 'patient' && !isDirectChat) loadTabs();
-      else startListen(chatId, role === 'pharmacy' ? myUid : pharmacyId);
+      // 💡 إذا كانت المحادثة مباشرة (Direct Chat) لا يتم تحميل شريط التابات نهائياً
+      if (role === 'patient' && !isDirectChat) {
+        loadTabs();
+      } else {
+        // في المحادثة المباشرة، نثبت تفعيل صيدلية الواجهة فوراً ونبدأ الاستماع
+        setActiveTab(pharmacyId);
+        startListen(chatId, role === 'pharmacy' ? myUid : pharmacyId);
+      }
     }
     return () => { 
       if (msgRef.current) msgRef.current(); 
@@ -299,6 +306,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const selectTab = (pid) => {
     setActiveTab(pid);
     db.ref(`chats/${chatId}/${pid}/unreadPatient`).set(0);
+    setMessages([]); // تنظيف الرسائل السابقة أثناء الانتقال
     startListen(chatId, pid);
   };
 
@@ -315,7 +323,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       if (snap.exists()) {
         snap.forEach(c => {
           const msgData = c.val();
-          // 💡 تحديث الرسائل المستقبلة لتصبح مقروءة فور رؤيتها بشاشتك
+          // تحديث الرسائل المستقبلة لتصبح مقروءة فوراً بشاشتك
           if (msgData.role !== role && !msgData.seen) {
             db.ref(`chats/${cId}/${pid}/messages/${c.key}/seen`).set(true);
           }
@@ -482,7 +490,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     }
   };
 
-  // 🛠️ تم تصليح دالة إرسال الموقع لتسمح بالإرسال غير المحدود وتعمل مع كل الـ roles
   const sendLocation = async () => {
     if (!chatId || !activePid) return;
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -490,8 +497,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     
     try {
       const loc = await Location.getCurrentPositionAsync({});
-      // استخدام رابط خرائط جوجل الرسمي المقبول عالمياً لفتح تطبيق الخرائط فوراً
-      const url = `https://www.google.com/maps?q=${loc.coords.latitude},${loc.coords.longitude}`;
+      // الرابط العالمي الدقيق لخرائط جوجل لفتح التطبيق الخارجي مباشرة بسلاسة
+      const url = `https://www.google.com/maps/search/?api=1&query=${loc.coords.latitude},${loc.coords.longitude}`;
       
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
       await ref.set({ role, locationUrl: url, timestamp: Date.now(), seen: false });
@@ -528,9 +535,14 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   return (
     <Animated.View style={[st.container, { transform: [{ translateY: slideAnim }], backgroundColor: theme?.cardBg || '#ffffff' }]}>
+      {/* 💡 شريط الرأس مصلح ليعرض اسم الصيدلية المحددة ديناميكياً بدلاً من undefined */}
       <View style={st.header}>
         <View style={{ flex: 1 }}>
-          <Text style={st.headerTitle} numberOfLines={1}>{requestName || 'المحادثة'}</Text>
+          <Text style={st.headerTitle} numberOfLines={1}>
+            {role === 'patient' && isDirectChat && requestName 
+              ? requestName 
+              : (role === 'patient' && activeTab && tabNames[activeTab] ? tabNames[activeTab] : (requestName || 'المحادثة'))}
+          </Text>
           <Text style={st.statusTxt}>{userStatus}</Text>
         </View>
         <TouchableOpacity onPress={onClose}>
@@ -538,7 +550,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         </TouchableOpacity>
       </View>
 
-      {role === 'patient' && tabs.length > 0 && (
+      {/* 💡 شريط التابات مصلح: لا يظهر أبداً إن كانت المحادثة مباشرة لل مريض */}
+      {role === 'patient' && !isDirectChat && tabs.length > 0 && (
         <ScrollView horizontal style={[st.tabsBar, { borderBottomColor: theme?.border || '#ccc', backgroundColor: theme?.bg || '#f9f9f9' }]} showsHorizontalScrollIndicator={false}>
           {tabs.map(tid => (
             <TouchableOpacity key={tid}
@@ -719,7 +732,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
             />
           )}
 
-          {/* 💡 إضافة إمكانية مشاركة الموقع للمريض أيضاً عبر زر إرسال إن كان الحقل فارغاً، أو الحفاظ عليه */}
           {!isRecording && text.trim().length === 0 && role === 'patient' && (
             <TouchableOpacity style={st.iconBtn} onPress={sendLocation}>
               <Text style={{ fontSize: 21 }}>📍</Text>
@@ -774,12 +786,4 @@ const mkStyles = (t) => StyleSheet.create({
   chatInput: { flex: 1, padding: 10, borderWidth: 1, borderRadius: 20, fontSize: 14 },
   sendBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20 },
   modalBackground: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
-  closeImgBtn: { position: 'absolute', top: Platform.OS === 'android' ? 40 : 55, right: 25, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.25)', width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center' },
-  closeImgTxt: { color: 'white', fontSize: 32, fontWeight: '300', marginTop: -4 },
-  fullImage: { width: '100%', height: '80%' },
-  
-  metaContainer: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginTop: 3, gap: 3, alignSelf: 'flex-start' },
-  mediaMetaFix: { position: 'absolute', bottom: 5, left: 8, backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 5, borderRadius: 8, marginTop: 0 },
-  timeText: { fontSize: 9.5, fontWeight: '400' },
-  waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 }
-});
+  closeImgBtn: { position: 'absolute', top: Platform.OS === 'android' ? 40 : 55, right: 25, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.25)', width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center
