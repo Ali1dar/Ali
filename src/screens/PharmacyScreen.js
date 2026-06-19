@@ -17,6 +17,17 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
   const qRef = useRef(null);
   const dotRefs = useRef({});
 
+  // دالة مساعدة لتنسيق وقت الطلب بالتوقيت المحلي العراقي
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      return '';
+    }
+  };
+
   useEffect(() => {
     if (!province) return;
     if (qRef.current) db.ref(`requests/${province}`).off('value', qRef.current);
@@ -97,10 +108,18 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
 
                     <View style={{ flex: 1 }}>
                       <Text style={[st.medName, { color: theme.text }]}>{item.name}</Text>
-                      <Text style={{ color: theme.primary, fontSize: 12, textAlign: 'right', marginTop: 2 }}>
-                        👤 {patientNames[item.patientId] || 'جاري...'}
-                      </Text>
-                      <View style={{ flexDirection: 'row', gap: 5, marginTop: 4, flexWrap: 'wrap' }}>
+                      
+                      {/* 🕒 سطر تفاصيل المريض والوقت بشكل متقابل ومتناسق */}
+                      <View style={st.patientRow}>
+                        <Text style={[st.timeText, { color: theme.subText }]}>
+                          🕒 {formatTime(item.createdAt)}
+                        </Text>
+                        <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '500' }}>
+                          👤 {patientNames[item.patientId] || 'جاري...'}
+                        </Text>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                         <View style={{ backgroundColor: b.b, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 4 }}>
                           <Text style={{ color: b.c, fontSize: 11, fontWeight: 'bold' }}>{b.t}</Text>
                         </View>
@@ -153,6 +172,8 @@ const mkStyles = (t) => StyleSheet.create({
   empty: { textAlign: 'center', marginTop: 24, fontStyle: 'italic' },
   item: { padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
   medName: { fontWeight: 'bold', fontSize: 15, textAlign: 'right' },
+  patientRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, width: '100%' },
+  timeText: { fontSize: 11, fontWeight: '400' },
   actions: { flexDirection: 'row', gap: 6, marginTop: 11, justifyContent: 'flex-end', flexWrap: 'wrap' },
   btn: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 6 },
   btnTxt: { color: 'white', fontWeight: 'bold', fontSize: 11 },
