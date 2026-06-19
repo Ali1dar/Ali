@@ -3,7 +3,7 @@ name: Deploy OTA Update to Expo
 on:
   push:
     branches:
-      - main  # ⚠️ تأكد إذا كان اسم الفرع الرئيسي عندك main أو master وقمه بتعديله إذا لزم الأمر
+      - main
 
 jobs:
   update:
@@ -18,14 +18,13 @@ jobs:
         with:
           node-version: 18
 
-      - name: Setup EAS CLI
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Install EAS CLI manually
+        run: npm install -g eas-cli
 
       - name: Install dependencies
         run: npm install
 
       - name: Publish Update
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas update --branch production --message "تحديث تلقائي أونلاين من GitHub Actions"
