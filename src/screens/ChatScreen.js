@@ -21,7 +21,7 @@ const formatMsgTime = (ts) => {
   }
 };
 
-function AudioPlayer({ uri, isMe, timestamp }) {
+function AudioPlayer({ uri, isMe, timestamp, seen }) {
   const [sound, setSound] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -104,7 +104,7 @@ function AudioPlayer({ uri, isMe, timestamp }) {
           </Text>
         </TouchableOpacity>
 
-        <View style={{ flex: 1, justifyContent: 'center', position: 'relative' }}>
+        <View style={{ flex: 1, justifyContent: 'center', position: 'relative', marginHorizontal: 5 }}>
           <View style={[ap.waBar, { backgroundColor: isMe ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)' }]}>
             <View style={[ap.waFill, { width: `${progress * 100}%`, backgroundColor: isMe ? 'white' : '#00796b' }]} />
           </View>
@@ -119,7 +119,7 @@ function AudioPlayer({ uri, isMe, timestamp }) {
       </View>
 
       <View style={ap.waFooterRow}>
-        <Text style={[ap.waDurationTxt, { color: isMe ? 'rgba(255,255,255,0.7)' : '#666' }]}>
+        <Text style={[ap.waDurationTxt, { color: isMe ? 'rgba(255,255,255,0.8)' : '#666' }]}>
           {playing ? fmtTime(position) : fmtTime(duration || 0)}
         </Text>
         
@@ -128,7 +128,11 @@ function AudioPlayer({ uri, isMe, timestamp }) {
             <Text style={[ap.waTimeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
               {formatMsgTime(timestamp)}
             </Text>
-            {isMe && <Text style={{ fontSize: 11, color: '#e0f2f1' }}>✓✓</Text>}
+            {isMe && (
+              <Text style={[ap.waChecks, { color: seen ? '#4fc3f7' : 'rgba(255,255,255,0.5)' }]}>
+                {seen ? '✓✓' : '✓'}
+              </Text>
+            )}
           </View>
         )}
       </View>
@@ -137,16 +141,17 @@ function AudioPlayer({ uri, isMe, timestamp }) {
 }
 
 const ap = StyleSheet.create({
-  whatsappContainer: { minWidth: 230, paddingVertical: 4 },
+  whatsappContainer: { minWidth: 240, paddingVertical: 6, paddingHorizontal: 4 },
   mainRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  waPlayBtn: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
+  waPlayBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   waBar: { height: 3, borderRadius: 1.5, overflow: 'hidden' },
   waFill: { height: 3 },
-  waSliderDot: { width: 8, height: 8, borderRadius: 4, position: 'absolute', top: '50%', marginTop: -4, marginLeft: -4 },
-  waRateBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 1 },
-  waFooterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingHorizontal: 2 },
-  waDurationTxt: { fontSize: 10, fontWeight: '400' },
-  waTimeText: { fontSize: 9 },
+  waSliderDot: { width: 10, height: 10, borderRadius: 5, position: 'absolute', top: '50%', marginTop: -5, marginLeft: -5 },
+  waRateBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 4 },
+  waFooterRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, paddingHorizontal: 4 },
+  waDurationTxt: { fontSize: 11, fontWeight: '400' },
+  waTimeText: { fontSize: 10 },
+  waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 }
 });
 
 function RecordingIndicator({ seconds }) {
@@ -307,7 +312,16 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
     const listener = ref.on('value', snap => {
       const arr = [];
-      if (snap.exists()) snap.forEach(c => arr.push({ id: c.key, ...c.val() }));
+      if (snap.exists()) {
+        snap.forEach(c => {
+          const msgData = c.val();
+          // 💡 تحديث الرسائل المستقبلة لتصبح مقروءة فور رؤيتها بشاشتك
+          if (msgData.role !== role && !msgData.seen) {
+            db.ref(`chats/${cId}/${pid}/messages/${c.key}/seen`).set(true);
+          }
+          arr.push({ id: c.key, ...msgData });
+        });
+      }
 
       setMessages(prev => {
         const isNewMsg = prev.length > 0 && arr.length > prev.length;
@@ -383,7 +397,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       onToast('تم تعديل الرسالة');
     } else {
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-      await ref.set({ role, text: msg, timestamp: Date.now() });
+      await ref.set({ role, text: msg, timestamp: Date.now(), seen: false });
       const cn = role === 'pharmacy' ? 'unreadPatient' : 'unreadPharmacy';
       const cr = db.ref(`chats/${chatId}/${activePid}/${cn}`);
       cr.once('value').then(s => cr.set((s.val() || 0) + 1));
@@ -430,7 +444,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     if (!r.canceled && r.assets[0]) {
       const b64 = `data:image/jpeg;base64,${r.assets[0].base64}`;
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-      await ref.set({ role, image: b64, timestamp: Date.now() });
+      await ref.set({ role, image: b64, timestamp: Date.now(), seen: false });
       onToast('تم إرسال الصورة');
       triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'مريض', '📷 أرسل صورة جديدة');
     }
@@ -458,7 +472,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       setRecording(null);
       if (doSend && uri && chatId && activePid) {
         const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-        await ref.set({ role, audio: uri, timestamp: Date.now() });
+        await ref.set({ role, audio: uri, timestamp: Date.now(), seen: false });
         onToast('تم إرسال الرسالة الصوتية 🎙️');
         triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'مريض', '🎙️ أرسل رسالة صوتية');
       }
@@ -468,22 +482,32 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     }
   };
 
+  // 🛠️ تم تصليح دالة إرسال الموقع لتسمح بالإرسال غير المحدود وتعمل مع كل الـ roles
   const sendLocation = async () => {
+    if (!chatId || !activePid) return;
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return onToast('يرجى السماح بتحديد الموقع', 'error');
-    const loc = await Location.getCurrentPositionAsync({});
-    // 🛠️ تم إصلاح الخطأ البرمي هنا بإضافة علامة الـ $ وحذف رقم 1 الزائد
-    const url = `http://googleusercontent.com/maps.google.com/?q=${loc.coords.latitude},${loc.coords.longitude}`;
-    const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-    await ref.set({ role: 'pharmacy', locationUrl: url, timestamp: Date.now() });
-    onToast('تم إرسال الموقع 📍');
-    triggerNotification('الصيدلية', '📍 أرسلت لك موقعها الجغرافي');
+    
+    try {
+      const loc = await Location.getCurrentPositionAsync({});
+      // استخدام رابط خرائط جوجل الرسمي المقبول عالمياً لفتح تطبيق الخرائط فوراً
+      const url = `https://www.google.com/maps?q=${loc.coords.latitude},${loc.coords.longitude}`;
+      
+      const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
+      await ref.set({ role, locationUrl: url, timestamp: Date.now(), seen: false });
+      
+      onToast('تم إرسال الموقع 📍');
+      triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'مريض', '📍 أرسل موقعاً جغرافياً');
+    } catch (err) {
+      console.log("خطأ في جلب الموقع الجغرافي:", err);
+      onToast('فشل جلب الموقع الجغرافي، يرجى المحاولة لاحقاً', 'error');
+    }
   };
 
   const sendQuick = async (t) => {
     if (t.includes('سعر')) { setText(t); return; }
     const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-    await ref.set({ role: 'pharmacy', text: t, timestamp: Date.now() });
+    await ref.set({ role: 'pharmacy', text: t, timestamp: Date.now(), seen: false });
     const cr = db.ref(`chats/${chatId}/${activePid}/unreadPatient`);
     cr.once('value').then(s => cr.set((s.val() || 0) + 1));
     triggerNotification('الصيدلية', t);
@@ -547,7 +571,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           scrollEventThrottle={100}
           renderItem={({ item }) => {
             const isMe = item.role === role;
-            // تأمين ألوان الفقاعات لمنع الانهيار بسبب عدم قراءة الـ dark mode
             const defaultBg = isMe ? (theme?.primary || '#00796b') : '#dcf8c6';
             
             return (
@@ -561,7 +584,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                     item.isDeleted && { backgroundColor: theme?.bg || '#f5f5f5', borderWidth: 1, borderColor: theme?.border || '#ccc' }
                   ]}
                 >
-                  {/* 1. معالجة النصوص */}
+                  {/* 1. معالجة النصوص و الـ الصح الديناميكي */}
                   {item.text && (
                     <View>
                       <Text style={[
@@ -577,7 +600,11 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                           <Text style={[st.timeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
                             {formatMsgTime(item.timestamp)}
                           </Text>
-                          {isMe && <Text style={st.waChecks}>✓✓</Text>}
+                          {isMe && (
+                            <Text style={[st.waChecks, { color: item.seen ? '#4fc3f7' : 'rgba(255,255,255,0.5)' }]}>
+                              {item.seen ? '✓✓' : '✓'}
+                            </Text>
+                          )}
                         </View>
                       )}
                     </View>
@@ -594,14 +621,18 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                           <Text style={[st.timeText, { color: 'white' }]}>
                             {formatMsgTime(item.timestamp)}
                           </Text>
-                          {isMe && <Text style={[st.waChecks, { color: '#e0f2f1' }]}>✓✓</Text>}
+                          {isMe && (
+                            <Text style={[st.waChecks, { color: item.seen ? '#4fc3f7' : 'rgba(255,255,255,0.7)' }]}>
+                              {item.seen ? '✓✓' : '✓'}
+                            </Text>
+                          )}
                         </View>
                       )}
                     </View>
                   )}
 
                   {/* 3. معالجة الرسائل الصوتية */}
-                  {item.audio && <AudioPlayer uri={item.audio} isMe={isMe} timestamp={item.timestamp} />}
+                  {item.audio && <AudioPlayer uri={item.audio} isMe={isMe} timestamp={item.timestamp} seen={item.seen} />}
 
                   {/* 4. معالجة خرائط الموقع الجغرافي */}
                   {item.locationUrl && (
@@ -614,7 +645,11 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                           <Text style={[st.timeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
                             {formatMsgTime(item.timestamp)}
                           </Text>
-                          {isMe && <Text style={st.waChecks}>✓✓</Text>}
+                          {isMe && (
+                            <Text style={[st.waChecks, { color: item.seen ? '#4fc3f7' : 'rgba(255,255,255,0.5)' }]}>
+                              {item.seen ? '✓✓' : '✓'}
+                            </Text>
+                          )}
                         </View>
                       )}
                     </View>
@@ -684,6 +719,13 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
             />
           )}
 
+          {/* 💡 إضافة إمكانية مشاركة الموقع للمريض أيضاً عبر زر إرسال إن كان الحقل فارغاً، أو الحفاظ عليه */}
+          {!isRecording && text.trim().length === 0 && role === 'patient' && (
+            <TouchableOpacity style={st.iconBtn} onPress={sendLocation}>
+              <Text style={{ fontSize: 21 }}>📍</Text>
+            </TouchableOpacity>
+          )}
+
           {!isRecording && (
             <TouchableOpacity style={[st.sendBtn, { backgroundColor: isEditingMode ? '#00c853' : (theme?.primary || '#00796b') }]} onPress={sendMsg}>
               <Text style={{ color: 'white', fontWeight: 'bold' }}>{isEditingMode ? 'حفظ' : 'إرسال'}</Text>
@@ -739,5 +781,5 @@ const mkStyles = (t) => StyleSheet.create({
   metaContainer: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginTop: 3, gap: 3, alignSelf: 'flex-start' },
   mediaMetaFix: { position: 'absolute', bottom: 5, left: 8, backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 5, borderRadius: 8, marginTop: 0 },
   timeText: { fontSize: 9.5, fontWeight: '400' },
-  waChecks: { fontSize: 11, color: '#00796b', fontWeight: 'bold', marginLeft: 1 }
+  waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 }
 });
