@@ -1,4 +1,4 @@
-// src/screens/ChatScreen.js
+Enter// src/screens/ChatScreen.js
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList,
@@ -10,7 +10,19 @@ import * as Location from 'expo-location';
 import { db, firebaseAuth, formatLastSeen } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 
-function AudioPlayer({ uri, isMe }) {
+// 🕒 دالة مساعدة عامة لتحويل الـ timestamp إلى وقت (ساعة:دقيقة م/ص)
+const formatMsgTime = (ts) => {
+  if (!ts) return '';
+  try {
+    const date = new Date(ts);
+    return date.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit', hour12: true });
+  } catch (e) {
+    return '';
+  }
+};
+
+function AudioPlayer({ uri, isMe, timestamp }) {
+  const { theme } = useTheme();
   const [sound, setSound] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -71,14 +83,6 @@ function AudioPlayer({ uri, isMe }) {
     }, 300);
   };
 
-  const seek = async (dir) => {
-    if (!sound) return;
-    const st = await sound.getStatusAsync();
-    const newPos = Math.max(0, Math.min((st.positionMillis || 0) + dir * 5000, duration));
-    await sound.setPositionAsync(newPos);
-    setPosition(newPos);
-  };
-
   const toggleRate = async () => {
     const newRate = rate === 1.0 ? 1.5 : rate === 1.5 ? 2.0 : 1.0;
     setRate(newRate);
@@ -93,40 +97,63 @@ function AudioPlayer({ uri, isMe }) {
   const progress = duration > 0 ? (position / duration) : 0;
 
   return (
-    <View style={[ap.wrap, { backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.07)' }]}>
-      <TouchableOpacity onPress={loadAndPlay} style={ap.playBtn}>
-        <Text style={{ fontSize: 18 }}>{playing ? '⏸' : '▶️'}</Text>
-      </TouchableOpacity>
-      <View style={{ flex: 1, marginHorizontal: 8 }}>
-        <View style={ap.bar}>
-          <View style={[ap.fill, { width: `${progress * 100}%` }]} />
+    <View style={ap.whatsappContainer}>
+      <View style={ap.mainRow}>
+        {/* زر تشغيل / إيقاف مقتبس من واتساب ميكروفون وتصميم دائري */}
+        <TouchableOpacity onPress={loadAndPlay} style={[ap.waPlayBtn, { backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,121,107,0.1)' }]}>
+          <Text style={{ fontSize: 15, color: isMe ? 'white' : '#00796b', marginLeft: playing ? 0 : 2 }}>
+            {playing ? '⏸' : '▶️'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* شريط التقدم الخطي لواتساب مع منزلق وهمي ذكي */}
+        <View style={{ flex: 1, justifyContent: 'center', position: 'relative' }}>
+          <View style={[ap.waBar, { backgroundColor: isMe ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)' }]}>
+            <View style={[ap.waFill, { width: `${progress * 100}%`, backgroundColor: isMe ? 'white' : '#00796b' }]} />
+          </View>
+          {/* نقطة التحكم المتنقلة على خط الصوت */}
+          <View style={[ap.waSliderDot, { left: `${progress * 100}%`, backgroundColor: isMe ? 'white' : '#00796b' }]} />
         </View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
-          <Text style={[ap.time, { color: isMe ? 'rgba(255,255,255,0.8)' : '#555' }]}>{fmtTime(position)}</Text>
-          <Text style={[ap.time, { color: isMe ? 'rgba(255,255,255,0.8)' : '#555' }]}>{fmtTime(duration)}</Text>
-        </View>
+
+        {/* زر تغيير السرعة الذكي الخفيف */}
+        <TouchableOpacity onPress={toggleRate} style={[ap.waRateBtn, { borderColor: isMe ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.2)' }]}>
+          <Text style={{ fontSize: 10, fontWeight: 'bold', color: isMe ? 'white' : '#333' }}>{rate}×</Text>
+        </TouchableOpacity>
+
+        {/* أيقونة الميكروفون الجانبية لتوثيق الصوت المباشر */}
+        <Text style={{ fontSize: 18, color: isMe ? 'rgba(255,255,255,0.7)' : '#00796b', marginLeft: 4 }}>🎙️</Text>
       </View>
-      <TouchableOpacity onPress={() => seek(-1)} style={ap.skipBtn}>
-        <Text style={{ fontSize: 13, color: isMe ? 'white' : '#333' }}>↩5</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => seek(1)} style={ap.skipBtn}>
-        <Text style={{ fontSize: 13, color: isMe ? 'white' : '#333' }}>5↪</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={toggleRate} style={[ap.rateBtn, { borderColor: isMe ? 'rgba(255,255,255,0.5)' : '#aaa' }]}>
-        <Text style={{ fontSize: 11, fontWeight: 'bold', color: isMe ? 'white' : '#333' }}>{rate}×</Text>
-      </TouchableOpacity>
+
+      {/* سطر العداد والوقت السفلي داخل الفقاعة الصويتة للواتساب */}
+      <View style={ap.waFooterRow}>
+        <Text style={[ap.waDurationTxt, { color: isMe ? 'rgba(255,255,255,0.7)' : '#666' }]}>
+          {playing ? fmtTime(position) : fmtTime(duration || 0)}
+        </Text>
+        
+        {timestamp && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            <Text style={[ap.waTimeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
+              {formatMsgTime(timestamp)}
+            </Text>
+            <Text style={{ fontSize: 11, color: isMe ? '#e0f2f1' : '#00796b' }}>✓✓</Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
 
 const ap = StyleSheet.create({
-  wrap: { borderRadius: 10, padding: 8, marginTop: 5, flexDirection: 'row', alignItems: 'center', minWidth: 200 },
-  playBtn: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center' },
-  bar: { height: 4, backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 2 },
-  fill: { height: 4, backgroundColor: '#00796b', borderRadius: 2 },
-  time: { fontSize: 10 },
-  skipBtn: { paddingHorizontal: 4, paddingVertical: 2 },
-  rateBtn: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, marginLeft: 4 },
+  whatsappContainer: { minWidth: 230, paddingVertical: 4 },
+  mainRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  waPlayBtn: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
+  waBar: { height: 3, borderRadius: 1.5, overflow: 'hidden' },
+  waFill: { height: 3 },
+  waSliderDot: { width: 8, height: 8, borderRadius: 4, position: 'absolute', top: '50%', marginTop: -4, marginLeft: -4 },
+  waRateBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 1 },
+  waFooterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingHorizontal: 2 },
+  waDurationTxt: { fontSize: 10, fontWeight: '400' },
+  waTimeText: { fontSize: 9 },
 });
 
 function RecordingIndicator({ seconds }) {
@@ -175,7 +202,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const [imgModalVisible, setImgModalVisible] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
 
-  // حالات خاصة بالتعديل والحذف
   const [editingMsgId, setEditingMsgId] = useState(null);
   const [isEditingMode, setIsEditingMode] = useState(false);
 
@@ -191,7 +217,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const isDirectChat = chatId?.startsWith('p_');
   const st = mkStyles(theme);
 
-  // دالة لحساب تنسيق الوقت المنقضي الذكي لعدم الاتصال
   const formatTimeAgo = (timestamp) => {
     if (!timestamp) return 'غير متصل';
     const diff = Date.now() - timestamp;
@@ -214,21 +239,15 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     return `منذ ${days} أيام`;
   };
 
-  // إدارة حالة التواجد والاتصال الحقيقية (Presence) للـ User الحالي
   useEffect(() => {
     if (!myUid) return;
     const pRef = db.ref(`users/${myUid}/presence`);
-
     if (visible) {
-      // عند الدخول للمحادثة: تعيين متصل الآن
       pRef.set({ online: true, lastSeen: Date.now() });
-      // تفعيل ميزة التحديث التلقائي للمغادرة عند قطع الاتصال المفاجئ بالشبكة
       pRef.onDisconnect().set({ online: false, lastSeen: Date.now() });
     } else {
-      // عند إغلاق المحادثة: تعيين غير متصل مع الوقت الحالي
       pRef.set({ online: false, lastSeen: Date.now() });
     }
-
     return () => {
       if (!visible) pRef.set({ online: false, lastSeen: Date.now() });
     };
@@ -310,7 +329,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
     msgRef.current = () => ref.off('value', listener);
 
-    // متابعة وتحديث حالة اتصال الطرف الآخر حياً وتحديث نصوص "منذ ثوان" بشكل دوري
     if (presenceRef.current) presenceRef.current();
     let target = pid;
     if (role === 'pharmacy') {
@@ -329,8 +347,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     uPresenceRef.on('value', s => {
       const d = s.val();
       updateStatusText(d);
-      
-      // إعادة تشغيل المؤقت الزمني لتحديث الفروقات الدقيقة بالوقت تلقائياً كل 10 ثوانٍ
       clearInterval(statusIntervalRef.current);
       statusIntervalRef.current = setInterval(() => {
         updateStatusText(d);
@@ -354,11 +370,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       await fetch('https://vercel-api-five-omega.vercel.app/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: targetToken,
-          title,
-          body,
-        }),
+        body: JSON.stringify({ token: targetToken, title, body }),
       });
     } catch (e) { console.log('فشل الإشعار:', e); }
   };
@@ -369,7 +381,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     setText('');
 
     if (isEditingMode && editingMsgId) {
-      // معالجة تعديل الرسالة القائمة
       await db.ref(`chats/${chatId}/${activePid}/messages/${editingMsgId}`).update({
         text: msg,
         isEdited: true
@@ -378,7 +389,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       setEditingMsgId(null);
       onToast('تم تعديل الرسالة');
     } else {
-      // إرسال رسالة جديدة تماماً
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
       await ref.set({ role, text: msg, timestamp: Date.now() });
       const cn = role === 'pharmacy' ? 'unreadPatient' : 'unreadPharmacy';
@@ -388,9 +398,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     }
   };
 
-  // ميزة حذف وتعديل الرسائل عند الضغط المطول
   const handleLongPressMessage = (item) => {
-    if (item.role !== role || item.isDeleted) return; // الحذف والتعديل لرسائلك الخاصة فقط
+    if (item.role !== role || item.isDeleted) return;
 
     const options = [];
     if (item.text) {
@@ -418,7 +427,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       }
     });
     options.push({ text: 'إلغاء', style: 'cancel' });
-
     Alert.alert('خيارات الرسالة', 'اختر الإجراء المطلوب للرسالة المختارة:', options);
   };
 
@@ -471,7 +479,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return onToast('يرجى السماح بتحديد الموقع', 'error');
     const loc = await Location.getCurrentPositionAsync({});
-    const url = `https://www.google.com/maps?q=${loc.coords.latitude},${loc.coords.longitude}`;
+    const url = `http://maps.google.com/?q=${loc.coords.latitude},${loc.coords.longitude}`;
     const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
     await ref.set({ role: 'pharmacy', locationUrl: url, timestamp: Date.now() });
     onToast('تم إرسال الموقع 📍');
@@ -552,30 +560,70 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                   onLongPress={() => handleLongPressMessage(item)}
                   style={[
                     st.bubble, 
-                    { backgroundColor: isMe ? theme.primary : '#dcf8c6' },
+                    { backgroundColor: isMe ? theme.primary : (theme.dark ? '#1f2c34' : '#dcf8c6') },
                     item.isDeleted && { backgroundColor: theme.bg, borderWidth: 1, borderColor: theme.border }
                   ]}
                 >
+                  {/* 1. معالجة النصوص */}
                   {item.text && (
-                    <Text style={[
-                      st.msgTxt, 
-                      { color: isMe ? 'white' : '#333' },
-                      item.isDeleted && { color: theme.subText, fontStyle: 'italic', fontSize: 13 }
-                    ]}>
-                      {item.text} {item.isEdited && !item.isDeleted && <Text style={st.editedLabel}>(معدلة)</Text>}
-                    </Text>
+                    <View>
+                      <Text style={[
+                        st.msgTxt, 
+                        { color: isMe ? 'white' : (theme.dark ? '#e9edef' : '#333') },
+                        item.isDeleted && { color: theme.subText, fontStyle: 'italic', fontSize: 13 }
+                      ]}>
+                        {item.text} {item.isEdited && !item.isDeleted && <Text style={st.editedLabel}>(معدلة)</Text>}
+                      </Text>
+                      
+                      {/* عرض الوقت أسفل النص مباشرة محاكاة لواتساب */}
+                      {!item.isDeleted && item.timestamp && (
+                        <View style={st.metaContainer}>
+                          <Text style={[st.timeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
+                            {formatMsgTime(item.timestamp)}
+                          </Text>
+                          {isMe && <Text style={st.waChecks}>✓✓</Text>}
+                        </View>
+                      )}
+                    </View>
                   )}
+
+                  {/* 2. معالجة الصور */}
                   {item.image && (
-                    <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
-                      <Image source={{ uri: item.image }} style={st.msgImg} resizeMode="cover" />
-                    </TouchableOpacity>
+                    <View>
+                      <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
+                        <Image source={{ uri: item.image }} style={st.msgImg} resizeMode="cover" />
+                      </TouchableOpacity>
+                      {item.timestamp && (
+                        <View style={[st.metaContainer, st.mediaMetaFix]}>
+                          <Text style={[st.timeText, { color: 'white' }]}>
+                            {formatMsgTime(item.timestamp)}
+                          </Text>
+                          {isMe && <Text style={[st.waChecks, { color: '#e0f2f1' }]}>✓✓</Text>}
+                        </View>
+                      )}
+                    </View>
                   )}
-                  {item.audio && <AudioPlayer uri={item.audio} isMe={isMe} />}
+
+                  {/* 3. معالجة الرسائل الصوتية (شكل الواتساب المطور) */}
+                  {item.audio && <AudioPlayer uri={item.audio} isMe={isMe} timestamp={item.timestamp} />}
+
+                  {/* 4. معالجة خرائط الموقع الجغرافي */}
                   {item.locationUrl && (
-                    <TouchableOpacity onPress={() => Linking.openURL(item.locationUrl)} style={st.locBubble}>
-                      <Text style={{ color: '#00796b', fontWeight: 'bold' }}>📍 عرض الموقع على الخريطة</Text>
-                    </TouchableOpacity>
+                    <View>
+                      <TouchableOpacity onPress={() => Linking.openURL(item.locationUrl)} style={st.locBubble}>
+                        <Text style={{ color: '#00796b', fontWeight: 'bold' }}>📍 عرض الموقع على الخريطة</Text>
+                      </TouchableOpacity>
+                      {item.timestamp && (
+                        <View style={st.metaContainer}>
+                          <Text style={[st.timeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
+                            {formatMsgTime(item.timestamp)}
+                          </Text>
+                          {isMe && <Text style={st.waChecks}>✓✓</Text>}
+                        </View>
+                      )}
+                    </View>
                   )}
+
                 </TouchableOpacity>
               </View>
             );
@@ -600,7 +648,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           </ScrollView>
         )}
 
-        {/* شريط تنبيهي عند تفعيل نمط تعديل الرسالة النصية */}
         {isEditingMode && (
           <View style={[st.editIndicatorBar, { backgroundColor: theme.bg, borderTopColor: theme.border }]}>
             <TouchableOpacity onPress={cancelEditMode}>
@@ -672,11 +719,11 @@ const mkStyles = (t) => StyleSheet.create({
   tabBtn: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 20, borderWidth: 1, marginRight: 8, marginVertical: 8 },
   msgList: { flex: 1 },
   msgWrap: { marginBottom: 8 },
-  bubble: { maxWidth: '76%', padding: 10, borderRadius: 12 },
-  msgTxt: { fontSize: 14, lineHeight: 20, textAlign: 'right' },
+  bubble: { maxWidth: '78%', padding: 9, borderRadius: 12 },
+  msgTxt: { fontSize: 14, lineHeight: 20, textAlign: 'right', paddingBottom: 2 },
   editedLabel: { fontSize: 10, color: 'rgba(0,0,0,0.4)', fontStyle: 'italic' },
-  msgImg: { width: 200, height: 160, borderRadius: 8, marginTop: 5 },
-  locBubble: { padding: 8, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 7, marginTop: 4 },
+  msgImg: { width: 210, height: 170, borderRadius: 8, marginTop: 2 },
+  locBubble: { padding: 8, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 7, marginTop: 2 },
   quickBar: { maxHeight: 50, borderTopWidth: 1, paddingHorizontal: 8 },
   quickBtn: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 15, borderWidth: 1, marginRight: 8, marginVertical: 7 },
   quickTxt: { fontWeight: 'bold', fontSize: 12 },
@@ -692,4 +739,10 @@ const mkStyles = (t) => StyleSheet.create({
   closeImgBtn: { position: 'absolute', top: Platform.OS === 'android' ? 40 : 55, right: 25, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.25)', width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center' },
   closeImgTxt: { color: 'white', fontSize: 32, fontWeight: '300', marginTop: -4 },
   fullImage: { width: '100%', height: '80%' },
+  
+  // 🛠️ ستايلات وعناصر الوقت والصحّين الإضافية الهندسية
+  metaContainer: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginTop: 3, gap: 3, alignSelf: 'flex-start' },
+  mediaMetaFix: { position: 'absolute', bottom: 5, left: 8, backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 5, borderRadius: 8, marginTop: 0 },
+  timeText: { fontSize: 9.5, fontWeight: '400' },
+  waChecks: { fontSize: 11, color: '#00796b', fontWeight: 'bold', marginLeft: 1 }
 });
