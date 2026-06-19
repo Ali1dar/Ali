@@ -17,12 +17,28 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
   const qRef = useRef(null);
   const dotRefs = useRef({});
 
-  // دالة مساعدة لتنسيق وقت الطلب بالتوقيت المحلي العراقي
+  // 🕒 دالة موحدة لحساب الوقت المنقضي بنظام (منذ...) بالتوقيت المحلي العراقي
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
     try {
-      const date = new Date(timestamp);
-      return date.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
+      const diff = Date.now() - timestamp;
+      const seconds = Math.floor(diff / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+
+      if (seconds < 60) return 'منذ ثوانٍ';
+      if (minutes === 1) return 'منذ دقيقة';
+      if (minutes === 2) return 'منذ دقيقتين';
+      if (minutes < 11) return `منذ ${minutes} دقائق`;
+      if (minutes < 60) return `منذ ${minutes} دقيقة`;
+      if (hours === 1) return 'منذ ساعة';
+      if (hours === 2) return 'منذ ساعتين';
+      if (hours < 11) return `منذ ${hours} ساعات`;
+      if (hours < 24) return `منذ ${hours} ساعة`;
+      if (days === 1) return 'منذ يوم';
+      if (days === 2) return 'منذ يومين';
+      return `منذ ${days} أيام`;
     } catch (e) {
       return '';
     }
