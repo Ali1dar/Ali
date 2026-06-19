@@ -7,7 +7,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
-import { db, firebaseAuth } from '../utils/firebase';
+import { db, firebaseAuth, formatLastSeen } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 
 // 🕒 تحويل الـ timestamp إلى وقت (ساعة:دقيقة م/ص) بشكل آمن
@@ -212,7 +212,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   const myUid = firebaseAuth.currentUser?.uid;
   const isDirectChat = chatId?.startsWith('p_');
-  // 💡 تحديد الـ activePid بدقة بناءً على نوع المحادثة
   const activePid = role === 'pharmacy' ? myUid : (isDirectChat ? pharmacyId : (activeTab || pharmacyId));
   const st = mkStyles(theme);
 
@@ -252,16 +251,25 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     };
   }, [visible, myUid]);
 
+  // 🛠️ التعديل الجذري: تصفير كل البيانات القديمة فور تغير الـ chatId لمنع تداخل المحادثات والتابات المعلقة
   useEffect(() => {
     Animated.timing(slideAnim, { toValue: visible ? 0 : 700, duration: 300, useNativeDriver: true }).start();
+    
     if (visible && chatId) {
-      // 💡 إذا كانت المحادثة مباشرة (Direct Chat) لا يتم تحميل شريط التابات نهائياً
+      // 🚨 تنظيف الحالات القديمة فوراً لتجهيز الشاشة للطلب الجديد بصفحة بيضاء
+      setTabs([]);
+      setTabNames({});
+      setMessages([]);
+      setActiveTab(null);
+      setUserStatus('جاري التحميل...');
+
       if (role === 'patient' && !isDirectChat) {
         loadTabs();
       } else {
-        // في المحادثة المباشرة، نثبت تفعيل صيدلية الواجهة فوراً ونبدأ الاستماع
-        setActiveTab(pharmacyId);
-        startListen(chatId, role === 'pharmacy' ? myUid : pharmacyId);
+        // في المحادثة المباشرة أو الصيدلية، نثبت تفعيل المعرف ونبدأ الاستماع
+        const currentPid = role === 'pharmacy' ? myUid : pharmacyId;
+        setActiveTab(currentPid);
+        startListen(chatId, currentPid);
       }
     }
     return () => { 
@@ -306,7 +314,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const selectTab = (pid) => {
     setActiveTab(pid);
     db.ref(`chats/${chatId}/${pid}/unreadPatient`).set(0);
-    setMessages([]); // تنظيف الرسائل السابقة أثناء الانتقال
     startListen(chatId, pid);
   };
 
@@ -323,7 +330,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       if (snap.exists()) {
         snap.forEach(c => {
           const msgData = c.val();
-          // تحديث الرسائل المستقبلة لتصبح مقروءة فوراً بشاشتك
           if (msgData.role !== role && !msgData.seen) {
             db.ref(`chats/${cId}/${pid}/messages/${c.key}/seen`).set(true);
           }
@@ -497,8 +503,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     
     try {
       const loc = await Location.getCurrentPositionAsync({});
-      // الرابط العالمي الدقيق لخرائط جوجل لفتح التطبيق الخارجي مباشرة بسلاسة
-      const url = `https://www.google.com/maps/search/?api=1&query=${loc.coords.latitude},${loc.coords.longitude}`;
+      const url = `http://maps.google.com/?q=${loc.coords.latitude},${loc.coords.longitude}`;
       
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
       await ref.set({ role, locationUrl: url, timestamp: Date.now(), seen: false });
@@ -535,14 +540,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   return (
     <Animated.View style={[st.container, { transform: [{ translateY: slideAnim }], backgroundColor: theme?.cardBg || '#ffffff' }]}>
-      {/* 💡 شريط الرأس مصلح ليعرض اسم الصيدلية المحددة ديناميكياً بدلاً من undefined */}
       <View style={st.header}>
         <View style={{ flex: 1 }}>
-          <Text style={st.headerTitle} numberOfLines={1}>
-            {role === 'patient' && isDirectChat && requestName 
-              ? requestName 
-              : (role === 'patient' && activeTab && tabNames[activeTab] ? tabNames[activeTab] : (requestName || 'المحادثة'))}
-          </Text>
+          <Text style={st.headerTitle} numberOfLines={1}>{requestName || 'المحادثة'}</Text>
           <Text style={st.statusTxt}>{userStatus}</Text>
         </View>
         <TouchableOpacity onPress={onClose}>
@@ -550,8 +550,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         </TouchableOpacity>
       </View>
 
-      {/* 💡 شريط التابات مصلح: لا يظهر أبداً إن كانت المحادثة مباشرة لل مريض */}
-      {role === 'patient' && !isDirectChat && tabs.length > 0 && (
+      {role === 'patient' && tabs.length > 0 && (
         <ScrollView horizontal style={[st.tabsBar, { borderBottomColor: theme?.border || '#ccc', backgroundColor: theme?.bg || '#f9f9f9' }]} showsHorizontalScrollIndicator={false}>
           {tabs.map(tid => (
             <TouchableOpacity key={tid}
@@ -597,7 +596,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                     item.isDeleted && { backgroundColor: theme?.bg || '#f5f5f5', borderWidth: 1, borderColor: theme?.border || '#ccc' }
                   ]}
                 >
-                  {/* 1. معالجة النصوص و الـ الصح الديناميكي */}
                   {item.text && (
                     <View>
                       <Text style={[
@@ -623,7 +621,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                     </View>
                   )}
 
-                  {/* 2. معالجة الصور */}
                   {item.image && (
                     <View>
                       <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
@@ -644,10 +641,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                     </View>
                   )}
 
-                  {/* 3. معالجة الرسائل الصوتية */}
                   {item.audio && <AudioPlayer uri={item.audio} isMe={isMe} timestamp={item.timestamp} seen={item.seen} />}
 
-                  {/* 4. معالجة خرائط الموقع الجغرافي */}
                   {item.locationUrl && (
                     <View>
                       <TouchableOpacity onPress={() => Linking.openURL(item.locationUrl)} style={st.locBubble}>
@@ -786,4 +781,12 @@ const mkStyles = (t) => StyleSheet.create({
   chatInput: { flex: 1, padding: 10, borderWidth: 1, borderRadius: 20, fontSize: 14 },
   sendBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20 },
   modalBackground: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
-  closeImgBtn: { position: 'absolute', top: Platform.OS === 'android' ? 40 : 55, right: 25, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.25)', width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center
+  closeImgBtn: { position: 'absolute', top: Platform.OS === 'android' ? 40 : 55, right: 25, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.25)', width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center' },
+  closeImgTxt: { color: 'white', fontSize: 32, fontWeight: '300', marginTop: -4 },
+  fullImage: { width: '100%', height: '80%' },
+  
+  metaContainer: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginTop: 3, gap: 3, alignSelf: 'flex-start' },
+  mediaMetaFix: { position: 'absolute', bottom: 5, left: 8, backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 5, borderRadius: 8, marginTop: 0 },
+  timeText: { fontSize: 9.5, fontWeight: '400' },
+  waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 }
+});
