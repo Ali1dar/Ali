@@ -82,38 +82,48 @@ function AppContent() {
     return () => backHandler.remove();
   }, []);
 
-  // 🕒 آلية الحذف التلقائي للطلبات/المحادثات التي مر عليها 48 ساعة
+  // 🕒 آلية الحذف التلقائي الذكي للطلبات والمحادثات المرتبطة بها
   useEffect(() => {
     if (!user) return;
 
-    // 48 ساعة بالملي ثانية = 48 * 60 * 60 * 1000 = 172800000
+    // 48 ساعة بالملي ثانية = 172800000
     const FORTY_EIGHT_HOURS = 172800000;
     const expirationLimit = Date.now() - FORTY_EIGHT_HOURS;
 
-    // فحص مسار المحادثات (chats) وحذف القديم منها
-    const chatsRef = db.ref('chats');
+    // جلب مسار الطلبات بالكامل لفحصه وتنظيفه
+    const requestsRef = db.ref('requests');
     
-    // نقوم بالقراءة لمرة واحدة عند فتح التطبيق لتنظيف قاعدة البيانات ومسح الفائض
-    chatsRef.once('value').then(snapshot => {
+    requestsRef.once('value').then(snapshot => {
       if (snapshot.exists()) {
-        snapshot.forEach(childSnapshot => {
-          const chatIdKey = childSnapshot.key;
-          const chatData = childSnapshot.val();
+        snapshot.forEach(provinceSnapshot => {
+          const provKey = provinceSnapshot.key;
           
-          // نبحث عن حقل الطابع الزمني للطلب (createdAt)
-          if (chatData && chatData.createdAt) {
-            if (chatData.createdAt < expirationLimit) {
-              // إذا كان عمر الطلب أكثر من 48 ساعة، يتم حذفه نهائياً من فايربيس
-              db.ref(`chats/${chatIdKey}`).remove()
-                .then(() => {
-                  console.log(`تم حذف المحادثة المنتهية: ${chatIdKey}`);
-                })
-                .catch(err => console.log("خطأ في الحذف تلقائياً:", err));
+          provinceSnapshot.forEach(requestSnapshot => {
+            const reqData = requestSnapshot.val();
+            const reqId = requestSnapshot.key;
+            
+            if (reqData) {
+              // 1. فحص ما إذا كان الطلب منتهياً (مر عليه 48 ساعة)
+              const hasExpired = reqData.createdAt && reqData.createdAt < expirationLimit;
+              
+              // 2. فحص ما إذا كان الطلب قديماً جداً ولا يحتوي على حقل الوقت أصلاً لضمان مسحه
+              const isLegacyWithoutDate = !reqData.createdAt;
+
+              // إذا تحقق أي من الشرطين يتم تفعيل الحذف النهائي للطلب والمحادثة
+              if (hasExpired || isLegacyWithoutDate) {
+                // حذف الطلب نهائياً من المحافظة الخاصة به
+                db.ref(`requests/${provKey}/${reqId}`).remove();
+                
+                // حذف المحادثة التابعة للطلب مباشرة
+                db.ref(`chats/${reqId}`).remove();
+                
+                console.log(`[تنظيف تلقائي] تم حذف الطلب والمحادثة للمعرف: ${reqId}`);
+              }
             }
-          }
+          });
         });
       }
-    });
+    }).catch(err => console.log("خطأ أثناء التنظيف التلقائي للطلبات:", err));
 
   }, [user]);
 
