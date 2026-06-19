@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList,
-  Image, Animated, Platform, Linking, ScrollView, KeyboardAvoidingView, BackHandler, Modal
+  Image, Animated, Platform, Linking, ScrollView, KeyboardAvoidingView, BackHandler, Modal, Alert
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
@@ -175,22 +175,76 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const [imgModalVisible, setImgModalVisible] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
 
+  // حالات خاصة بالتعديل والحذف
+  const [editingMsgId, setEditingMsgId] = useState(null);
+  const [isEditingMode, setIsEditingMode] = useState(false);
+
   const listRef = useRef(null);
   const slideAnim = useRef(new Animated.Value(700)).current;
   const msgRef = useRef(null);
+  const presenceRef = useRef(null);
   const recTimerRef = useRef(null);
+  const statusIntervalRef = useRef(null);
 
-  const activePid = role === 'pharmacy' ? firebaseAuth.currentUser?.uid : (activeTab || pharmacyId);
+  const myUid = firebaseAuth.currentUser?.uid;
+  const activePid = role === 'pharmacy' ? myUid : (activeTab || pharmacyId);
   const isDirectChat = chatId?.startsWith('p_');
   const st = mkStyles(theme);
+
+  // دالة لحساب تنسيق الوقت المنقضي الذكي لعدم الاتصال
+  const formatTimeAgo = (timestamp) => {
+    if (!timestamp) return 'غير متصل';
+    const diff = Date.now() - timestamp;
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (seconds < 60) return 'منذ ثوانٍ';
+    if (minutes === 1) return 'منذ دقيقة';
+    if (minutes === 2) return 'منذ دقيقتين';
+    if (minutes < 11) return `منذ ${minutes} دقائق`;
+    if (minutes < 60) return `منذ ${minutes} دقيقة`;
+    if (hours === 1) return 'منذ ساعة';
+    if (hours === 2) return 'منذ ساعتين';
+    if (hours < 11) return `منذ ${hours} ساعات`;
+    if (hours < 24) return `منذ ${hours} ساعة`;
+    if (days === 1) return 'منذ يوم';
+    if (days === 2) return 'منذ يومين';
+    return `منذ ${days} أيام`;
+  };
+
+  // إدارة حالة التواجد والاتصال الحقيقية (Presence) للـ User الحالي
+  useEffect(() => {
+    if (!myUid) return;
+    const pRef = db.ref(`users/${myUid}/presence`);
+
+    if (visible) {
+      // عند الدخول للمحادثة: تعيين متصل الآن
+      pRef.set({ online: true, lastSeen: Date.now() });
+      // تفعيل ميزة التحديث التلقائي للمغادرة عند قطع الاتصال المفاجئ بالشبكة
+      pRef.onDisconnect().set({ online: false, lastSeen: Date.now() });
+    } else {
+      // عند إغلاق المحادثة: تعيين غير متصل مع الوقت الحالي
+      pRef.set({ online: false, lastSeen: Date.now() });
+    }
+
+    return () => {
+      if (!visible) pRef.set({ online: false, lastSeen: Date.now() });
+    };
+  }, [visible, myUid]);
 
   useEffect(() => {
     Animated.timing(slideAnim, { toValue: visible ? 0 : 700, duration: 300, useNativeDriver: true }).start();
     if (visible && chatId) {
       if (role === 'patient' && !isDirectChat) loadTabs();
-      else startListen(chatId, role === 'pharmacy' ? firebaseAuth.currentUser?.uid : pharmacyId);
+      else startListen(chatId, role === 'pharmacy' ? myUid : pharmacyId);
     }
-    return () => { if (msgRef.current) msgRef.current(); };
+    return () => { 
+      if (msgRef.current) msgRef.current(); 
+      if (presenceRef.current) presenceRef.current();
+      clearInterval(statusIntervalRef.current);
+    };
   }, [visible, chatId]);
 
   useEffect(() => {
@@ -256,17 +310,36 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
     msgRef.current = () => ref.off('value', listener);
 
+    // متابعة وتحديث حالة اتصال الطرف الآخر حياً وتحديث نصوص "منذ ثوان" بشكل دوري
+    if (presenceRef.current) presenceRef.current();
     let target = pid;
     if (role === 'pharmacy') {
       target = isDirectChat ? cId.split('_')[1] : (localRequests?.find(r => r.id === cId)?.patientId || pid);
     }
-    db.ref(`users/${target}/presence`).on('value', s => {
+    
+    const uPresenceRef = db.ref(`users/${target}/presence`);
+    const updateStatusText = (snapData) => {
+      if (snapData?.online === true) {
+        setUserStatus('🟢 متصل الآن');
+      } else {
+        setUserStatus(`🕒 آخر ظهور ${formatTimeAgo(snapData?.lastSeen)}`);
+      }
+    };
+
+    uPresenceRef.on('value', s => {
       const d = s.val();
-      setUserStatus(d?.online === true ? '🟢 متصل الآن' : `🕒 ${formatLastSeen(d?.lastSeen)}`);
+      updateStatusText(d);
+      
+      // إعادة تشغيل المؤقت الزمني لتحديث الفروقات الدقيقة بالوقت تلقائياً كل 10 ثوانٍ
+      clearInterval(statusIntervalRef.current);
+      statusIntervalRef.current = setInterval(() => {
+        updateStatusText(d);
+      }, 10000);
     });
+
+    presenceRef.current = () => uPresenceRef.off('value');
   };
 
-  // ✅ التصحيح الرئيسي - token بدل to
   const triggerNotification = async (title, body) => {
     try {
       let targetUid = activePid;
@@ -282,7 +355,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          token: targetToken,  // ✅ تم التصحيح من "to" إلى "token"
+          token: targetToken,
           title,
           body,
         }),
@@ -294,12 +367,59 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     const msg = text.trim();
     if (!msg || !chatId || !activePid) return;
     setText('');
-    const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-    await ref.set({ role, text: msg, timestamp: Date.now() });
-    const cn = role === 'pharmacy' ? 'unreadPatient' : 'unreadPharmacy';
-    const cr = db.ref(`chats/${chatId}/${activePid}/${cn}`);
-    cr.once('value').then(s => cr.set((s.val() || 0) + 1));
-    triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'رسالة من مريض', msg);
+
+    if (isEditingMode && editingMsgId) {
+      // معالجة تعديل الرسالة القائمة
+      await db.ref(`chats/${chatId}/${activePid}/messages/${editingMsgId}`).update({
+        text: msg,
+        isEdited: true
+      });
+      setIsEditingMode(false);
+      setEditingMsgId(null);
+      onToast('تم تعديل الرسالة');
+    } else {
+      // إرسال رسالة جديدة تماماً
+      const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
+      await ref.set({ role, text: msg, timestamp: Date.now() });
+      const cn = role === 'pharmacy' ? 'unreadPatient' : 'unreadPharmacy';
+      const cr = db.ref(`chats/${chatId}/${activePid}/${cn}`);
+      cr.once('value').then(s => cr.set((s.val() || 0) + 1));
+      triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'رسالة من مريض', msg);
+    }
+  };
+
+  // ميزة حذف وتعديل الرسائل عند الضغط المطول
+  const handleLongPressMessage = (item) => {
+    if (item.role !== role || item.isDeleted) return; // الحذف والتعديل لرسائلك الخاصة فقط
+
+    const options = [];
+    if (item.text) {
+      options.push({
+        text: '✏️ تعديل الرسالة',
+        onPress: () => {
+          setText(item.text);
+          setIsEditingMode(true);
+          setEditingMsgId(item.id);
+        }
+      });
+    }
+    options.push({
+      text: '🗑️ حذف للطرفين',
+      style: 'destructive',
+      onPress: async () => {
+        await db.ref(`chats/${chatId}/${activePid}/messages/${item.id}`).update({
+          text: '🚫 تم حذف هذه الرسالة',
+          image: null,
+          audio: null,
+          locationUrl: null,
+          isDeleted: true
+        });
+        onToast('تم حذف الرسالة');
+      }
+    });
+    options.push({ text: 'إلغاء', style: 'cancel' });
+
+    Alert.alert('خيارات الرسالة', 'اختر الإجراء المطلوب للرسالة المختارة:', options);
   };
 
   const sendImage = async () => {
@@ -372,6 +492,12 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     setImgModalVisible(true);
   };
 
+  const cancelEditMode = () => {
+    setIsEditingMode(false);
+    setEditingMsgId(null);
+    setText('');
+  };
+
   if (!visible) return null;
 
   return (
@@ -421,9 +547,23 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
             const isMe = item.role === role;
             return (
               <View style={[st.msgWrap, isMe ? { alignItems: 'flex-start' } : { alignItems: 'flex-end' }]}>
-                <View style={[st.bubble, { backgroundColor: isMe ? theme.primary : '#dcf8c6' }]}>
+                <TouchableOpacity 
+                  activeOpacity={0.8} 
+                  onLongPress={() => handleLongPressMessage(item)}
+                  style={[
+                    st.bubble, 
+                    { backgroundColor: isMe ? theme.primary : '#dcf8c6' },
+                    item.isDeleted && { backgroundColor: theme.bg, borderWidth: 1, borderColor: theme.border }
+                  ]}
+                >
                   {item.text && (
-                    <Text style={[st.msgTxt, { color: isMe ? 'white' : '#333' }]}>{item.text}</Text>
+                    <Text style={[
+                      st.msgTxt, 
+                      { color: isMe ? 'white' : '#333' },
+                      item.isDeleted && { color: theme.subText, fontStyle: 'italic', fontSize: 13 }
+                    ]}>
+                      {item.text} {item.isEdited && !item.isDeleted && <Text style={st.editedLabel}>(معدلة)</Text>}
+                    </Text>
                   )}
                   {item.image && (
                     <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
@@ -436,13 +576,13 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                       <Text style={{ color: '#00796b', fontWeight: 'bold' }}>📍 عرض الموقع على الخريطة</Text>
                     </TouchableOpacity>
                   )}
-                </View>
+                </TouchableOpacity>
               </View>
             );
           }}
         />
 
-        {role === 'pharmacy' && (
+        {role === 'pharmacy' && !isEditingMode && (
           <ScrollView horizontal style={[st.quickBar, { borderTopColor: theme.border, backgroundColor: theme.bg }]} showsHorizontalScrollIndicator={false}>
             {[
               { l: '🟢 متوفر', t: 'مرحباً، الدواء متوفر لدينا وجاهز للاستلام.' },
@@ -460,18 +600,32 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           </ScrollView>
         )}
 
+        {/* شريط تنبيهي عند تفعيل نمط تعديل الرسالة النصية */}
+        {isEditingMode && (
+          <View style={[st.editIndicatorBar, { backgroundColor: theme.bg, borderTopColor: theme.border }]}>
+            <TouchableOpacity onPress={cancelEditMode}>
+              <Text style={st.cancelEditTxt}>إلغاء التعديل ×</Text>
+            </TouchableOpacity>
+            <Text style={[st.editIndicatorLabel, { color: theme.subText }]}>جاري تعديل الرسالة المنتقاة...</Text>
+          </View>
+        )}
+
         <View style={[st.inputArea, { backgroundColor: theme.cardBg, borderTopColor: theme.border }]}>
-          <TouchableOpacity onPress={sendImage} style={st.iconBtn}>
-            <Text style={{ fontSize: 21 }}>📷</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPressIn={startRecording}
-            onPressOut={() => stopRecordingAndSend(true)}
-            style={[st.iconBtn, isRecording && st.iconBtnRecording]}
-            activeOpacity={0.7}
-          >
-            <Text style={{ fontSize: 21 }}>{isRecording ? '🔴' : '🎙️'}</Text>
-          </TouchableOpacity>
+          {!isEditingMode && (
+            <TouchableOpacity onPress={sendImage} style={st.iconBtn}>
+              <Text style={{ fontSize: 21 }}>📷</Text>
+            </TouchableOpacity>
+          )}
+          {!isEditingMode && (
+            <TouchableOpacity
+              onPressIn={startRecording}
+              onPressOut={() => stopRecordingAndSend(true)}
+              style={[st.iconBtn, isRecording && st.iconBtnRecording]}
+              activeOpacity={0.7}
+            >
+              <Text style={{ fontSize: 21 }}>{isRecording ? '🔴' : '🎙️'}</Text>
+            </TouchableOpacity>
+          )}
 
           {isRecording ? (
             <View style={{ flex: 1 }}>
@@ -480,15 +634,16 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           ) : (
             <TextInput
               style={[st.chatInput, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }]}
-              placeholder="اكتب رسالتك..." placeholderTextColor={theme.subText}
+              placeholder={isEditingMode ? "عدل رسالتك هنا..." : "اكتب رسالتك..."} 
+              placeholderTextColor={theme.subText}
               value={text} onChangeText={setText} textAlign="right"
               onSubmitEditing={sendMsg}
             />
           )}
 
           {!isRecording && (
-            <TouchableOpacity style={[st.sendBtn, { backgroundColor: theme.primary }]} onPress={sendMsg}>
-              <Text style={{ color: 'white', fontWeight: 'bold' }}>إرسال</Text>
+            <TouchableOpacity style={[st.sendBtn, { backgroundColor: isEditingMode ? '#00c853' : theme.primary }]} onPress={sendMsg}>
+              <Text style={{ color: 'white', fontWeight: 'bold' }}>{isEditingMode ? 'حفظ' : 'إرسال'}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -512,18 +667,22 @@ const mkStyles = (t) => StyleSheet.create({
   container: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20000 },
   header: { backgroundColor: '#00796b', padding: 15, paddingTop: Platform.OS === 'android' ? 42 : 58, flexDirection: 'row', alignItems: 'center' },
   headerTitle: { color: 'white', fontWeight: 'bold', fontSize: 16 },
-  statusTxt: { color: '#b2dfdb', fontSize: 11, marginTop: 2 },
+  statusTxt: { color: '#b2dfdb', fontSize: 11, marginTop: 2, fontWeight: '500' },
   tabsBar: { maxHeight: 54, borderBottomWidth: 1, paddingHorizontal: 10 },
   tabBtn: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 20, borderWidth: 1, marginRight: 8, marginVertical: 8 },
   msgList: { flex: 1 },
   msgWrap: { marginBottom: 8 },
   bubble: { maxWidth: '76%', padding: 10, borderRadius: 12 },
-  msgTxt: { fontSize: 14, lineHeight: 20 },
+  msgTxt: { fontSize: 14, lineHeight: 20, textAlign: 'right' },
+  editedLabel: { fontSize: 10, color: 'rgba(0,0,0,0.4)', fontStyle: 'italic' },
   msgImg: { width: 200, height: 160, borderRadius: 8, marginTop: 5 },
   locBubble: { padding: 8, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 7, marginTop: 4 },
   quickBar: { maxHeight: 50, borderTopWidth: 1, paddingHorizontal: 8 },
   quickBtn: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 15, borderWidth: 1, marginRight: 8, marginVertical: 7 },
   quickTxt: { fontWeight: 'bold', fontSize: 12 },
+  editIndicatorBar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingVertical: 6, borderTopWidth: 1, alignItems: 'center' },
+  editIndicatorLabel: { fontSize: 11, fontStyle: 'italic' },
+  cancelEditTxt: { color: '#f44336', fontSize: 12, fontWeight: 'bold' },
   inputArea: { flexDirection: 'row', padding: 10, gap: 7, borderTopWidth: 1, alignItems: 'center' },
   iconBtn: { padding: 5 },
   iconBtnRecording: { backgroundColor: 'rgba(244,67,54,0.15)', borderRadius: 20, padding: 8 },
