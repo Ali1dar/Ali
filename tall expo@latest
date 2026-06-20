@@ -1,0 +1,102 @@
+[33m3da812d1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Merge branch 'main' of https://github.com/Ali1dar/Ali
+[33mdc4a7c0b[m إصلاح اعدادات expo config
+[33mbbd98742[m Update package.json
+[33m6d4efc7e[m Update package.json
+[33m830acced[m Update package.json
+[33m8bd598f8[m Update package.json
+[33m6eb9f2d9[m Update package.json
+[33mf3d76748[m Bump version from 1.0.4 to 1.0.5
+[33m921f8110[m Add scheme property to app.json
+[33m674350b6[m Update AuthScreen.js
+[33md1c3c3f9[m Update PatientScreen.js
+[33me8048da6[m Update PharmacyScreen.js
+[33m1fa3d6e4[m Update PharmacyScreen.js
+[33m37deb71c[m Update PharmacyScreen.js
+[33mb7a2aaf3[m Update ChatScreen.js
+[33mbfcb135a[m Update InboxScreen.js
+[33m5da43136[m Refactor InboxScreen handling for patient and pharmacy
+[33m8122e1ea[m Update PatientScreen.js
+[33md1a97a29[m Update ChatScreen.js
+[33m7c2652f4[m Update app.json
+[33mc6384282[m Update PatientScreen.js
+[33m2302b5e0[m Update PatientScreen.js
+[33m0afbe640[m Enhance time formatting and chat handling logic
+[33m4c8b1a24[m Add files via upload
+[33mcea5c881[m Add files via upload
+[33mb1abc0a2[m Bump version from 1.0.2 to 1.0.3
+[33m782a8f56[m Fix memory leaks and improve chat state handling
+[33ma11d4c80[m Update ChatScreen.js
+[33m36b35d66[m Update ChatScreen.js
+[33mb73df060[m Add files via upload
+[33mb6efd3b2[m Add files via upload
+[33m01908bcc[m Add seen status to messages and update styles
+[33m58b27d34[m Update ChatScreen.js
+[33m0f351061[m Update ChatScreen.js
+[33m7bc43c34[m Add files via upload
+[33m172d6ef6[m assets/adaptive-icon.png
+[33m55ade939[m Bump version from 1.0.1 to 1.0.2
+[33med640792[m Update PharmacyScreen.js
+[33ma0051992[m Update ChatScreen.js
+[33m8930c799[m Update PharmacyScreen.js
+[33m57a6c799[m Update InboxScreen.js
+[33m9473c4c7[m Add files via upload
+[33md2922dc6[m Update InboxScreen.js
+[33m0b939777[m Update PatientScreen.js
+[33m46c1c8df[m Update ChatScreen.js
+[33md372b8a4[m Update app.json
+[33mf4b25899[m Update app.json with new updates and runtimeVersion
+[33m14726900[m Update eas.json
+[33mee2317d4[m Update GitHub Actions workflow for EAS CLI
+[33mf26221bd[m Fix typo in workflow name
+[33m8080d22c[m Create update.yml
+[33m7d355180[m Implement time ago display for patient requests
+[33m4eb3d3ef[m Update App.js
+[33mf044b63e[m Add auto-delete feature for expired chats
+[33m8ac8a8b2[m Update projectId and owner in app.json
+[33m50610a57[m Fix pharmacy ID extraction in InboxScreen
+[33mbf213a97[m Fix branchKey assignment for user IDs in InboxScreen
+[33mbba69e12[m fix: use firebase messaging only
+[33mb905c0dd[m fix: remove android folder
+[33m30ccc9e0[m fix: AndroidManifest tools:replace
+[33mb43ab6fd[m fix: firebase manifest conflict
+[33m9c79fbee[m fix: firebase versions
+[33m4f011d82[m Update AuthScreen.js
+[33m320d8bb6[m Update ChatScreen.js
+[33m0dcad4bd[m Refactor chat listener and cleanup logic
+[33m813ec1bc[m Update App.js
+[33m5974fecc[m Add newline at end of ChatScreen.js
+[33m47178afb[m Update ChatScreen.js
+[33m0b448eb4[m Update App.js
+[33me5590baa[m Update InboxScreen.js
+[33m8546f649[m Update ChatScreen.js
+[33mcb64d53d[m Update ChatScreen.js
+[33m73b30198[m fix: smart scroll and audio player
+[33m093c5b3c[m Add patient inbox functionality to App.js
+[33m817745fc[m Update PatientScreen.js
+[33m33481ca6[m Add role prop to InboxScreen and update logic
+[33m02310fca[m Update NearbyScreen.js
+[33m0d711316[m Update NearbyScreen.js
+[33m277b9ef2[m Update App.js
+[33md470ae58[m Remove text from hero content in AuthScreen
+[33m0ae7a000[m Update package.json
+[33m0d2c1c14[m Update App.js
+[33mc4a51a8c[m Update app.json
+[33m050f2821[m Update notifications.js
+[33mcaef62b6[m Update app.json
+[33mdb43d636[m clean notifications.js
+[33m396229b8[m fix firebaseConfig import path
+[33m1f851ce1[m update notification api to vercel
+[33m06f8cb89[m fix dependencies
+[33m001a3426[m downgrade expo to 51
+[33m5a1b39f8[m update expo
+[33m131ab2b3[m fix eas env
+[33mfdf19ede[m fix slug match
+[33m940412f3[m fix project id
+[33mc251df0d[m add eas project id
+[33m71839bd8[m fix config plugins
+[33mce5b9ed8[m first commit
+[33m09f64bcd[m البناء الأول للتطبيق مع فايربيس
+[33mb1893c4d[m Manual fix expo dependencies versions
+[33m498df5f9[m Ignore node_modules and fix expo dependencies
+[33m76d6a2c5[m Fix expo dependencies compatibility
+[33m3044d9d3[m Clean prebuild setup
