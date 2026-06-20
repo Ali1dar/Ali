@@ -2,6 +2,7 @@
   "expo": {
     "name": "دليلك الدوائي",
     "slug": "dlylk-aldwaey",
+    "scheme": "dalilakedawai",
     "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -57,7 +58,8 @@
         {
           "microphonePermission": "يرجى السماح باستخدام الميكروفون لإرسال رسائل صوتية"
         }
-      ]
+      ],
+      "expo-updates"
     ],
     "extra": {
       "eas": {
