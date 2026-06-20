@@ -211,7 +211,7 @@ export default function AuthScreen({ onToast }) {
             onPress={handlePharmacyWhatsApp}
           >
             <Text style={[s.pharmacyBtnTxt, { color: theme.primary }]}>
-              🟢 تسجيل الدخول للصيدلية (تواصل عبر واتساب)
+              🟢 أنشاء حساب صيدلية (تواصل عبر واتساب)
             </Text>
           </TouchableOpacity>
         </View>
