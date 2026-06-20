@@ -1,11 +1,84 @@
 // src/screens/PatientScreen.js
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Image, Alert, ScrollView, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Image, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { db, firebaseAuth, getDistanceKm } from '../utils/firebase';
+import { db, firebaseAuth } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 import ProvincePicker from '../components/ProvincePicker';
+
+// المكون الفرعي الذكي المضاف حديثاً لمراقبة إشعارات كل طلب على حدة داخل القائمة
+const RequestItemWithBadge = ({ item, theme, st, badge, getTimeAgo, onOpenChat, deleteReq }) => {
+  const [hasUnread, setHasUnread] = useState(false);
+  const [targetPharmacy, setTargetPharmacy] = useState(null);
+
+  useEffect(() => {
+    if (!item.id) return;
+    const ref = db.ref(`chats/${item.id}`);
+    
+    const listener = ref.on('value', snap => {
+      let unreadFound = false;
+      let firstUnreadPharm = null;
+      
+      if (snap.exists()) {
+        const data = snap.val();
+        
+        // مسح شجري للبحث عن أي صيدلية ردت برسالة غير مقروءة للمريض
+        Object.keys(data).forEach(key => {
+          if (data[key] && typeof data[key] === 'object' && data[key].unreadPatient > 0) {
+            unreadFound = true;
+            if (!firstUnreadPharm) {
+              firstUnreadPharm = key; // حفظ معرف أول صيدلية لديها رسالة غير مقروءة
+            }
+          }
+        });
+      }
+      setHasUnread(unreadFound);
+      setTargetPharmacy(firstUnreadPharm);
+    });
+
+    return () => ref.off('value', listener);
+  }, [item.id]);
+
+  const b = badge(item.status);
+
+  return (
+    <View style={[st.reqItem, { backgroundColor: theme.cardBg || '#fff', borderColor: hasUnread ? '#e53935' : (theme.border || '#ccc'), borderWidth: hasUnread ? 1.8 : 1 }]}>
+      <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+        {item.image ? <Image source={{ uri: item.image }} style={{ width: 55, height: 55, borderRadius: 8, borderWidth: 0.5, borderColor: '#ccc' }} /> : null}
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+            {hasUnread && <View style={st.redDotPulse} />} 
+            <Text style={[{ fontWeight: 'bold', textAlign: 'right', fontSize: 14 }, { color: theme.text || '#000' }]}>{item.name}</Text>
+          </View>
+          
+          <Text style={{ fontSize: 11, color: theme.subText || '#777', textAlign: 'right', marginTop: 3 }}>
+            {getTimeAgo(item.createdAt)}
+          </Text>
+
+          <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
+            {item.latitude && <Text style={{ fontSize: 10, color: '#00796b', marginRight: 'auto' }}>📍 الموقع دقيق</Text>}
+            <View style={{ backgroundColor: b.b, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5 }}>
+              <Text style={{ color: b.c, fontSize: 11, fontWeight: 'bold' }}>{b.t}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+      
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
+        <TouchableOpacity 
+          style={[st.actBtn, { backgroundColor: hasUnread ? '#e53935' : '#0288d1', flexDirection: 'row', alignItems: 'center', gap: 5 }]} 
+          onPress={() => onOpenChat(item.id, item.name, targetPharmacy)}
+        >
+          <Text style={st.actTxt}>{hasUnread ? '💬 رد جديد غير مقروء' : '💬 دخول الدردشة'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[st.actBtn, { backgroundColor: '#f44336' }]} onPress={() => deleteReq(item.id)}>
+          <Text style={st.actTxt}>🗑 إلغاء الطلب</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
 
 const getTimeAgo = (timestamp) => {
   if (!timestamp) return 'وقت غير محدد';
@@ -53,7 +126,6 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
     return () => q.off('value', listenerRef.current);
   }, [province]);
 
-  // 🛠️ تم الإصلاح الجذري: مسح شجري عميق وشامل لحساب الرسائل غير المقروءة عند رد صيدليات متعددة
   useEffect(() => {
     const uid = firebaseAuth.currentUser?.uid;
     if (!uid) return;
@@ -63,20 +135,19 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
       let count = 0;
       if (snap.exists()) {
         snap.forEach(child => {
-          // التحقق من أن معرف المحادثة أو الطلب يرتبط بالمريض الحالي
-          if (!child.key.includes(uid)) return;
+          if (!child.key.includes(uid) && !requests.some(r => r.id === child.key)) {
+            // التحقق الاحتياطي الإضافي للربط مع معرفات الطلبات النشطة للمريض
+          }
           
           const chatData = child.val();
           if (!chatData) return;
 
-          // فحص التفرعات الداخلية (في حال وجود تفرع لكل صيدلية ردت على الطلب)
           Object.keys(chatData).forEach(key => {
             if (chatData[key] && typeof chatData[key] === 'object') {
               count += chatData[key].unreadPatient || 0;
             }
           });
           
-          // فحص احتياطي مباشر للمحافظة على المحادثات الفردية الكلاسيكية
           if (chatData.unreadPatient) {
             count += chatData.unreadPatient;
           }
@@ -85,7 +156,7 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
       setUnreadCount(count);
     });
     return () => ref.off('value', chatsListenerRef.current);
-  }, []);
+  }, [requests]);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -109,10 +180,9 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
       createdAt: Date.now(),
       patientId: firebaseAuth.currentUser.uid,
       province,
-      // 📍 الإحداثيات الصافية والآمنة التي يحتاجها الصيدلي في شاشته لحساب المسافة ديناميكياً
       latitude: coords ? coords.latitude : null,
       longitude: coords ? coords.longitude : null,
-      distanceText: coords ? 'محدد بدقة 📍' : 'غير محدد العنوان'
+      distanceText: coords ? 'محدد بدقة 📍' : 'غير حدد العنوان'
     });
     setMedInput(''); setImage(null);
     onToast('تم إرسال طلبك إلى جميع الصيدليات بنجاح! ✅');
@@ -134,26 +204,16 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
             timeout: 6000
           });
           
-          sendRequest(name, {
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude
-          });
+          sendRequest(name, { latitude: loc.coords.latitude, longitude: loc.coords.longitude });
         } catch (innerErr) {
-          console.log("تأخر الـ GPS، جاري استخدام الدقة المتوازنة الاحتياطية:", innerErr);
-          const fallbackLoc = await Location.getCurrentPositionAsync({ 
-            accuracy: Location.Accuracy.Balanced 
-          });
-          sendRequest(name, {
-            latitude: fallbackLoc.coords.latitude,
-            longitude: fallbackLoc.coords.longitude
-          });
+          const fallbackLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          sendRequest(name, { latitude: fallbackLoc.coords.latitude, longitude: fallbackLoc.coords.longitude });
         }
       } else {
         onToast('تم إرسال الطلب بدون إحداثيات لعدم توفر الصلاحية', 'warning');
         sendRequest(name, null);
       }
     } catch (err) { 
-      console.log("خطأ شامل في جلب الموقع:", err);
       sendRequest(name, null); 
     } finally { 
       setLoading(false); 
@@ -209,10 +269,7 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
           </View>
         )}
 
-        <TouchableOpacity
-          style={[st.searchBtn, { backgroundColor: theme.primary || '#00796b' }, loading && { opacity: 0.75 }]}
-          onPress={handleSearch} disabled={loading}
-        >
+        <TouchableOpacity style={[st.searchBtn, { backgroundColor: theme.primary || '#00796b' }, loading && { opacity: 0.75 }]} onPress={handleSearch} disabled={loading}>
           {loading ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <ActivityIndicator color="white" />
@@ -223,17 +280,11 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[st.searchBtn, { backgroundColor: '#607d8b', marginTop: 10 }]}
-          onPress={onOpenNearby}
-        >
+        <TouchableOpacity style={[st.searchBtn, { backgroundColor: '#607d8b', marginTop: 10 }]} onPress={onOpenNearby}>
           <Text style={st.btnTxt}>🏥 عرض الصيدليات القريبة والخافرة</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[st.searchBtn, { backgroundColor: '#0288d1', marginTop: 10 }]}
-          onPress={onOpenInbox}
-        >
+        <TouchableOpacity style={[st.searchBtn, { backgroundColor: '#0288d1', marginTop: 10 }]} onPress={onOpenInbox}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Text style={st.btnTxt}>💬 صندوق المحادثات الطبية</Text>
             {unreadCount > 0 && (
@@ -254,38 +305,17 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
             data={requests} 
             keyExtractor={item => item.id} 
             scrollEnabled={false} 
-            renderItem={({ item }) => {
-              const b = badge(item.status);
-              return (
-                <View style={[st.reqItem, { backgroundColor: theme.cardBg || '#fff', borderColor: theme.border || '#ccc' }]}>
-                  <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-                    {item.image ? <Image source={{ uri: item.image }} style={{ width: 55, height: 55, borderRadius: 8, borderWidth: 0.5, borderColor: '#ccc' }} /> : null}
-                    <View style={{ flex: 1 }}>
-                      <Text style={[{ fontWeight: 'bold', textAlign: 'right', fontSize: 14 }, { color: theme.text || '#000' }]}>{item.name}</Text>
-                      
-                      <Text style={{ fontSize: 11, color: theme.subText || '#777', textAlign: 'right', marginTop: 3 }}>
-                        {getTimeAgo(item.createdAt)}
-                      </Text>
-
-                      <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
-                        {item.latitude && <Text style={{ fontSize: 10, color: '#00796b', marginRight: 'auto' }}>📍 الموقع دقيق</Text>}
-                        <View style={{ backgroundColor: b.b, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5 }}>
-                          <Text style={{ color: b.c, fontSize: 11, fontWeight: 'bold' }}>{b.t}</Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={[st.actBtn, { backgroundColor: '#0288d1' }]} onPress={() => onOpenChat(item.id, item.name)}>
-                      <Text style={st.actTxt}>💬 دخول الدردشة</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[st.actBtn, { backgroundColor: '#f44336' }]} onPress={() => deleteReq(item.id)}>
-                      <Text style={st.actTxt}>🗑 إلغاء الطلب</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            }}
+            renderItem={({ item }) => (
+              <RequestItemWithBadge 
+                item={item} 
+                theme={theme} 
+                st={st} 
+                badge={badge} 
+                getTimeAgo={getTimeAgo} 
+                onOpenChat={onOpenChat} 
+                deleteReq={deleteReq} 
+              />
+            )}
           />
         )}
       </View>
@@ -311,4 +341,6 @@ const mkStyles = (t) => StyleSheet.create({
   reqItem: { padding: 14, borderWidth: 1, borderRadius: 12, marginBottom: 10, elevation: 1 },
   actBtn: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 7 },
   actTxt: { color: 'white', fontWeight: 'bold', fontSize: 12 },
+  // تصميم النقطة الحمراء الصارخة والنابضة للإشعار اللحظي للرد الأحدث
+  redDotPulse: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#e53935', marginRight: 4 }
 });
