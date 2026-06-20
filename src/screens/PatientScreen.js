@@ -53,6 +53,7 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
     return () => q.off('value', listenerRef.current);
   }, [province]);
 
+  // 🛠️ تم الإصلاح الجذري: مسح شجري عميق وشامل لحساب الرسائل غير المقروءة عند رد صيدليات متعددة
   useEffect(() => {
     const uid = firebaseAuth.currentUser?.uid;
     if (!uid) return;
@@ -62,9 +63,23 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
       let count = 0;
       if (snap.exists()) {
         snap.forEach(child => {
+          // التحقق من أن معرف المحادثة أو الطلب يرتبط بالمريض الحالي
           if (!child.key.includes(uid)) return;
-          const data = child.val()[uid] || {};
-          count += data.unreadPatient || 0;
+          
+          const chatData = child.val();
+          if (!chatData) return;
+
+          // فحص التفرعات الداخلية (في حال وجود تفرع لكل صيدلية ردت على الطلب)
+          Object.keys(chatData).forEach(key => {
+            if (chatData[key] && typeof chatData[key] === 'object') {
+              count += chatData[key].unreadPatient || 0;
+            }
+          });
+          
+          // فحص احتياطي مباشر للمحافظة على المحادثات الفردية الكلاسيكية
+          if (chatData.unreadPatient) {
+            count += chatData.unreadPatient;
+          }
         });
       }
       setUnreadCount(count);
@@ -85,7 +100,6 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
     }
   };
 
-  // 🛠️ تم الإصلاح: تمرير وحفظ إحداثيات المريض الحقيقية بدلاً من تثبيتها على مركز المحافظة
   const sendRequest = async (name, coords) => {
     const ref = db.ref(`requests/${province}`).push();
     await ref.set({
@@ -95,7 +109,7 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
       createdAt: Date.now(),
       patientId: firebaseAuth.currentUser.uid,
       province,
-      // حفظ الإحداثيات الصافية بدلاً من نصوص المسافات المشوهة الثابتة
+      // 📍 الإحداثيات الصافية والآمنة التي يحتاجها الصيدلي في شاشته لحساب المسافة ديناميكياً
       latitude: coords ? coords.latitude : null,
       longitude: coords ? coords.longitude : null,
       distanceText: coords ? 'محدد بدقة 📍' : 'غير محدد العنوان'
@@ -104,7 +118,6 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
     onToast('تم إرسال طلبك إلى جميع الصيدليات بنجاح! ✅');
   };
 
-  // 🛠️ تم الإصلاح: تفعيل استقصاء الـ GPS بأعلى دقة جغرافية طبية ممكنة ومقاومة الطوارئ
   const handleSearch = async () => {
     const name = medInput.trim();
     if (!name && !image) return onToast('اكتب اسم الدواء أو أرفق صورة الوصفة!', 'error');
@@ -116,7 +129,6 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         try {
-          // محاولة جلب الدقة القصوى مع مهلة 6 ثوانٍ
           const loc = await Location.getCurrentPositionAsync({ 
             accuracy: Location.Accuracy.Highest,
             timeout: 6000
@@ -128,7 +140,6 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
           });
         } catch (innerErr) {
           console.log("تأخر الـ GPS، جاري استخدام الدقة المتوازنة الاحتياطية:", innerErr);
-          // حل بديل سريع إذا كان المريض داخل مبنى مقفل
           const fallbackLoc = await Location.getCurrentPositionAsync({ 
             accuracy: Location.Accuracy.Balanced 
           });
