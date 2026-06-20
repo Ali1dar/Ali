@@ -126,31 +126,32 @@ export default function PatientScreen({ onOpenChat, onOpenNearby, onOpenInbox, o
     return () => q.off('value', listenerRef.current);
   }, [province]);
 
+  // 🛠️ تم التعديل والجبه الذكي: احتساب الإشعارات فقط وحصرياً إذا كانت المحادثة تخص طلبات المريض الحالي النشطة
   useEffect(() => {
     const uid = firebaseAuth.currentUser?.uid;
-    if (!uid) return;
+    if (!uid || requests.length === 0) {
+      setUnreadCount(0); // تصفير فوري للحسابات الجديدة التي لا تملك أي طلبات نشطة
+      return;
+    }
     
     const ref = db.ref('chats');
     chatsListenerRef.current = ref.on('value', snap => {
       let count = 0;
       if (snap.exists()) {
         snap.forEach(child => {
-          if (!child.key.includes(uid) && !requests.some(r => r.id === child.key)) {
-            // التحقق الاحتياطي الإضافي للربط مع معرفات الطلبات النشطة للمريض
-          }
-          
+          // فحص أمني: هل الـ chat الحالي يطابق معرّف طلب يخص هذا المريض؟
+          const isMyRequest = requests.some(r => r.id === child.key);
+          if (!isMyRequest) return; // تخطي وتجاهل أي غرف شات تابعة لمرضى آخرين
+
           const chatData = child.val();
           if (!chatData) return;
 
+          // احتساب الرسائل غير المقروءة الموجهة للمريض من قبل الصيدليات المتفاعلة مع هذا الطلب
           Object.keys(chatData).forEach(key => {
-            if (chatData[key] && typeof chatData[key] === 'object') {
+            if (chatData[key] && typeof chatData[key] === 'object' && chatData[key].unreadPatient) {
               count += chatData[key].unreadPatient || 0;
             }
           });
-          
-          if (chatData.unreadPatient) {
-            count += chatData.unreadPatient;
-          }
         });
       }
       setUnreadCount(count);
@@ -341,6 +342,5 @@ const mkStyles = (t) => StyleSheet.create({
   reqItem: { padding: 14, borderWidth: 1, borderRadius: 12, marginBottom: 10, elevation: 1 },
   actBtn: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 7 },
   actTxt: { color: 'white', fontWeight: 'bold', fontSize: 12 },
-  // تصميم النقطة الحمراء الصارخة والنابضة للإشعار اللحظي للرد الأحدث
   redDotPulse: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#e53935', marginRight: 4 }
 });
