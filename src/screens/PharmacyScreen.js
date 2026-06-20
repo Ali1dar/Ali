@@ -1,14 +1,14 @@
 // src/screens/PharmacyScreen.js
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, Alert, Modal, Platform } from 'react-native';
-import { db, firebaseAuth } from '../utils/firebase';
+import { db } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 
 // 🌐 دالة حساب المسافة الحقيقية بين الصيدلية والمريض (Haversine Formula) بالكيلومترات
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   if (!lat1 || !lon1 || !lat2 || !lon2) return null;
   try {
-    const R = 6371; // نصف قطر كوكب الأرض بالكيلومترات
+    const R = 6371; 
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a =
@@ -16,8 +16,7 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
       Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
       Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const distance = R * c;
-    return distance.toFixed(1); // إرجاع المسافة مع تقريب لرقم عشري واحد (مثل: 2.4)
+    return (R * c).toFixed(1); 
   } catch (e) {
     return null;
   }
@@ -28,17 +27,13 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
   const [requests, setRequests] = useState([]);
   const [patientNames, setPatientNames] = useState({});
   const [dots, setDots] = useState({});
-  
-  // 📍 حفظ إحداثيات موقع الصيدلية الحالية المسترجعة من السيرفر
   const [pharmacyCoords, setPharmacyCoords] = useState({ lat: null, lon: null });
-  
   const [selectedImg, setSelectedImg] = useState(null);
   const [imgModalVisible, setImgModalVisible] = useState(false);
 
   const qRef = useRef(null);
   const dotRefs = useRef({});
 
-  // 🕒 دالة موحدة لحساب الوقت المنقضي بنظام (منذ...) بالتوقيت المحلي العراقي
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
     try {
@@ -65,7 +60,6 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
     }
   };
 
-  // 🛠️ جلب موقع الصيدلية الحالية أولاً لإنشاء مرجع حساب المسافة للطلبات القادمة
   useEffect(() => {
     if (!userId) return;
     db.ref(`users/${userId}/location`).once('value', snap => {
@@ -108,7 +102,6 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
 
   const updateStatus = async (id, status) => {
     try {
-      // تحديث حالة الطلب فقط دون التدخل في شاشة المحادثات
       await db.ref(`requests/${province}/${id}`).update({ status });
       onToast('تم التحديث ✅');
     } catch (error) {
@@ -150,7 +143,6 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
             renderItem={({ item }) => {
               const b = badge(item.status);
               
-              // 🛠️ معالجة الحساب الجغرافي للمسافة بدقة وعرضها للمستخدم
               let displayDistance = 'غير محدد';
               const calculated = calculateDistance(
                 pharmacyCoords.lat, 
@@ -171,12 +163,12 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
                 <View style={[st.item, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
                   <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
                     
-                    {/* ✅ تم إصلاح الخطأ القواعدي وعرض الصورة بشكل صحيح وسليم هنا */}
-                    {item.image ? (
+                    {/* ✅ تم إصلاح طريقة كتابة الشرط هنا لتمرير الـ Build بنجاح */}
+                    {!!item.image && (
                       <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
                         <Image source={{ uri: item.image }} style={{ width: 55, height: 55, borderRadius: 8, borderWidth: 1, borderColor: theme.border }} />
                       </TouchableOpacity>
-                    ) : null}
+                    )}
 
                     <View style={{ flex: 1 }}>
                       <Text style={[st.medName, { color: theme.text }]}>{item.name}</Text>
