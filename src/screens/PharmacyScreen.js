@@ -107,8 +107,13 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
   }, [province, userId]);
 
   const updateStatus = async (id, status) => {
-    await db.ref(`requests/${province}/${id}`).update({ status });
-    onToast('تم التحديث ✅');
+    try {
+      // تحديث حالة الطلب فقط دون التدخل في شاشة المحادثات
+      await db.ref(`requests/${province}/${id}`).update({ status });
+      onToast('تم التحديث ✅');
+    } catch (error) {
+      onToast('فشل التحديث ❌');
+    }
   };
 
   const hideReq = (id) => {
@@ -145,7 +150,7 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
             renderItem={({ item }) => {
               const b = badge(item.status);
               
-              // 🛠️ معالجة المسافة: فحص وحساب الإحداثيات الحقيقية ديناميكياً وعرضها بنص مفهوم للمستخدم
+              // 🛠️ معالجة الحساب الجغرافي للمسافة بدقة وعرضها للمستخدم
               let displayDistance = 'غير محدد';
               const calculated = calculateDistance(
                 pharmacyCoords.lat, 
@@ -166,13 +171,12 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
                 <View style={[st.item, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
                   <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
                     
-                    {if (item.image) {
-                      return (
-                        <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
-                          <Image source={{ uri: item.image }} style={{ width: 55, height: 55, borderRadius: 8, borderWidth: 1, borderColor: theme.border }} />
-                        </TouchableOpacity>
-                      );
-                    }}
+                    {/* ✅ تم إصلاح الخطأ القواعدي وعرض الصورة بشكل صحيح وسليم هنا */}
+                    {item.image ? (
+                      <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
+                        <Image source={{ uri: item.image }} style={{ width: 55, height: 55, borderRadius: 8, borderWidth: 1, borderColor: theme.border }} />
+                      </TouchableOpacity>
+                    ) : null}
 
                     <View style={{ flex: 1 }}>
                       <Text style={[st.medName, { color: theme.text }]}>{item.name}</Text>
@@ -191,7 +195,6 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
                           <Text style={{ color: b.c, fontSize: 11, fontWeight: 'bold' }}>{b.t}</Text>
                         </View>
                         
-                        {/* 🛠️ تم التعديل: إظهار المسافة الحسابية المقروءة والمفهومة بجانب أيقونة الموقع الجغرافي */}
                         <View style={{ backgroundColor: 'rgba(0,121,107,0.1)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 4 }}>
                           <Text style={{ color: theme.primary, fontSize: 11, fontWeight: '500' }}>📍 {displayDistance}</Text>
                         </View>
