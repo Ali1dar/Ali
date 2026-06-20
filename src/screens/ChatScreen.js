@@ -198,7 +198,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const [activeTab, setActiveTab] = useState(null);
   const [selectedImg, setSelectedImg] = useState(null);
   const [imgModalVisible, setImgModalVisible] = useState(false);
-  const [autoScroll, setAutoScroll] = useState(true);
 
   const [editingMsgId, setEditingMsgId] = useState(null);
   const [isEditingMode, setIsEditingMode] = useState(false);
@@ -251,19 +250,16 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     };
   }, [visible, myUid]);
 
-  // 🛠️ تم الإصلاح: تصفير كامل للتابات والمستمعين لمنع تعليق الصيدليات القديمة وتسريب الذاكرة
   useEffect(() => {
     Animated.timing(slideAnim, { toValue: visible ? 0 : 700, duration: 300, useNativeDriver: true }).start();
     
     let isMounted = true;
 
-    // فصل المستمعين القدامى فوراً قبل بناء المستمع الجديد
     if (msgRef.current) { msgRef.current(); msgRef.current = null; }
     if (presenceRef.current) { presenceRef.current(); presenceRef.current = null; }
     clearInterval(statusIntervalRef.current);
 
     if (visible && chatId) {
-      // تصفير جذري للحالات
       setTabs([]);
       setTabNames({});
       setMessages([]);
@@ -302,7 +298,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     }
   }, [visible]);
 
-  // 🛠️ تم الإصلاح: تمرير الـ isMounted لمنع تحديث الـ State بعد مغادرة الشاشة
   const loadTabs = async (isMounted) => {
     const snap = await db.ref(`chats/${chatId}`).once('value');
     if (!snap.exists() || !isMounted) return;
@@ -331,8 +326,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0);
     else db.ref(`chats/${cId}/${pid}/unreadPatient`).set(0);
 
-    const ref = db.ref(`chats/${cId}/${pid}/messages`);
-    let firstLoad = true;
+    // 🛠️ تم الإصلاح الجذري: جلب آخر 40 رسالة لمنع التأخير والتعليق في الشبكة والأجهزة المتوسطة
+    const ref = db.ref(`chats/${cId}/${pid}/messages`).limitToLast(40);
 
     const listener = ref.on('value', snap => {
       const arr = [];
@@ -342,19 +337,11 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           if (msgData.role !== role && !msgData.seen) {
             db.ref(`chats/${cId}/${pid}/messages/${c.key}/seen`).set(true);
           }
-          arr.push({ id: c.key, ...msgData });
+          // 🛠️ تم الإصلاح الجذري: استخدام unshift لصف الأحدث في البداية ليتوافق مع الـ FlatList المقلوبة
+          arr.unshift({ id: c.key, ...msgData });
         });
       }
-
-      setMessages(prev => {
-        const isNewMsg = prev.length > 0 && arr.length > prev.length;
-        if (firstLoad || isNewMsg) {
-          setAutoScroll(true);
-          setTimeout(() => listRef.current?.scrollToEnd({ animated: !firstLoad }), 80);
-          firstLoad = false;
-        }
-        return arr;
-      });
+      setMessages(arr);
     });
 
     msgRef.current = () => ref.off('value', listener);
@@ -397,7 +384,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       const userSnap = await db.ref(`users/${targetUid}`).once('value');
       const targetToken = userSnap.val()?.fcmToken;
       if (!targetToken) return;
-      await fetch('[https://vercel-api-five-omega.vercel.app/api/notify](https://vercel-api-five-omega.vercel.app/api/notify)', {
+      await fetch('https://vercel-api-five-omega.vercel.app/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: targetToken, title, body }),
@@ -505,7 +492,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     }
   };
 
-  // 🛠️ تم الإصلاح: تصحيح الـ Template Literal ورابط خرائط جوجل القياسي
+  // 🛠️ تم الإصلاح: تصحيح الرابط القياسي المباشر لخرائط جوجل بدون نصوص معطلة لفتح التطبيق الخارجي فوراً
   const sendLocation = async () => {
     if (!chatId || !activePid) return;
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -581,22 +568,17 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           keyExtractor={i => i.id || String(Math.random())}
           style={[st.msgList, { backgroundColor: theme?.chatBg || '#efeae2' }]}
           contentContainerStyle={{ padding: 14, paddingBottom: 20 }}
-          onContentSizeChange={() => {
-            if (autoScroll) listRef.current?.scrollToEnd({ animated: false });
-          }}
-          onScrollBeginDrag={() => setAutoScroll(false)}
-          onScroll={(e) => {
-            const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-            const isAtBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 60;
-            if (isAtBottom) setAutoScroll(true);
-          }}
-          scrollEventThrottle={100}
+          
+          // 🔥 الميزتان السحريتان: تمكين فتح الدردشة فوراً على آخر رسالة بثبات ومقاومة القفز المزعج
+          inverted
+          
           renderItem={({ item }) => {
             const isMe = item.role === role;
             const defaultBg = isMe ? (theme?.primary || '#00796b') : '#dcf8c6';
             
+            // 🛠️ تم التعديل: مطابقة الاتجاهات مع الـ FlatList المقلوبة (isMe يمين والآخر يسار)
             return (
-              <View style={[st.msgWrap, isMe ? { alignItems: 'flex-start' } : { alignItems: 'flex-end' }]}>
+              <View style={[st.msgWrap, isMe ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
                 <TouchableOpacity 
                   activeOpacity={0.8} 
                   onLongPress={() => handleLongPressMessage(item)}
@@ -685,7 +667,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
               { l: '🟢 متوفر', t: 'مرحباً، الدواء متوفر لدينا وجاهز للاستلام.' },
               { l: '🔴 غير متوفر', t: 'عذراً، هذا الدواء غير متوفر حالياً.' },
               { l: '📷 صورة أوضح', t: 'يرجى تصوير الوصفة الطبية بشكل أوضح.' },
-              { l: '💰 السعر', t: 'أهلاً بك، سعر هذا العلاج هو: ' },
+              { l: '💰 السعر', t: 'أهلاً بك، سعر هذا علاج هو: ' },
               { l: '📍 موقعي', action: sendLocation },
             ].map((q, i) => (
               <TouchableOpacity key={i}
