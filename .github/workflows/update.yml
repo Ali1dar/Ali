@@ -26,5 +26,5 @@ jobs:
 
       - name: Publish Update
         env:
-          EXPO_TOKEN: ${{qMq-ZBP-FUu1f_XkSiLscNix9mpJrbhCAkr9WOf5}}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas update --branch production --message "تحديث تلقائي أونلاين من GitHub Actions"
