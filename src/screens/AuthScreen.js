@@ -3,17 +3,16 @@ import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
-  ImageBackground, Dimensions,
+  ImageBackground, Dimensions, Linking, // ✅ تم إضافة Linking لفتح الواتساب
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { firebaseAuth, db, PROVINCES, arabicError } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 import ProvincePicker from '../components/ProvincePicker';
-import messaging from '@react-native-firebase/messaging'; // ✅ إضافة
+import messaging from '@react-native-firebase/messaging'; 
 
 const { width, height } = Dimensions.get('window');
 
-// ✅ دالة حفظ التوكن
 const saveFcmToken = async (uid) => {
   try {
     const authStatus = await messaging().requestPermission();
@@ -45,13 +44,32 @@ export default function AuthScreen({ onToast }) {
   const [otpSent, setOtpSent] = useState(false);
   const confirmRef = useRef(null);
 
+  // ✅ دالة التعامل مع تحويل الصيدلية إلى الواتساب الجديد الخاص بك للتفعيل والدخول
+  const handlePharmacyWhatsApp = () => {
+    const phoneNumber = '9647823017544'; // ⚠️ تم تحديث الرقم وتثبيته بصيغته الدولية السليمة هنا
+    const message = 'مرحباً، أود تسجيل صيدليتي وتفعيل الحساب في تطبيق دليلك الدوائي.';
+    const url = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
+
+    Linking.canOpenURL(url)
+      .then((supported) => {
+        if (supported) {
+          return Linking.openURL(url);
+        } else {
+          // حل احتياطي في حال فتح من متصفح خارجي أو نظام لا يدعم البروتوكول المباشر
+          const webUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
+          return Linking.openURL(webUrl);
+        }
+      })
+      .catch(() => onToast('يرجى التأكد من تثبيت تطبيق واتساب على جهازك', 'error'));
+  };
+
   const handleEmail = async () => {
     if (!email || !password) return onToast('يرجى إدخال البريد وكلمة المرور', 'error');
     setLoading(true);
     try {
       if (isLogin) {
         const cred = await firebaseAuth.signInWithEmailAndPassword(email.trim(), password.trim());
-        await saveFcmToken(cred.user.uid); // ✅
+        await saveFcmToken(cred.user.uid); 
       } else {
         if (!fullName.trim()) { setLoading(false); return onToast('يرجى كتابة الاسم الكامل', 'error'); }
         const cred = await firebaseAuth.createUserWithEmailAndPassword(email.trim(), password.trim());
@@ -59,7 +77,7 @@ export default function AuthScreen({ onToast }) {
           role: 'patient', patientName: fullName.trim(), email: email.trim(),
           province, subscriptionExpiry: Date.now() + 30 * 86400000,
         });
-        await saveFcmToken(cred.user.uid); // ✅
+        await saveFcmToken(cred.user.uid); 
       }
     } catch (e) { onToast(arabicError(e.code), 'error'); }
     finally { setLoading(false); }
@@ -91,7 +109,7 @@ export default function AuthScreen({ onToast }) {
           subscriptionExpiry: Date.now() + 30 * 86400000,
         });
       }
-      await saveFcmToken(r.user.uid); // ✅
+      await saveFcmToken(r.user.uid); 
       onToast('تم الدخول بنجاح!');
     } catch { onToast('رمز خاطئ أو منتهي الصلاحية', 'error'); }
     finally { setLoading(false); }
@@ -184,6 +202,18 @@ export default function AuthScreen({ onToast }) {
               {isLogin ? 'ليس لديك حساب؟ إنشاء حساب جديد' : 'لديك حساب؟ تسجيل الدخول'}
             </Text>
           </TouchableOpacity>
+
+          {/* ─── 🟢 زر تسجيل الدخول المضاف للصيدليات ─── */}
+          <View style={{ width: '100%', height: 1, backgroundColor: theme.border, marginVertical: 18 }} />
+          
+          <TouchableOpacity 
+            style={[s.pharmacyBtn, { borderColor: theme.primary }]} 
+            onPress={handlePharmacyWhatsApp}
+          >
+            <Text style={[s.pharmacyBtnTxt, { color: theme.primary }]}>
+              🟢 تسجيل الدخول للصيدلية (تواصل عبر واتساب)
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -204,4 +234,21 @@ const styles = (theme) => StyleSheet.create({
   input: { padding: 13, borderWidth: 2, borderRadius: 8, fontSize: 15, marginBottom: 13 },
   btn: { padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 4, marginBottom: 10 },
   btnTxt: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+  
+  pharmacyBtn: {
+    paddingVertical: 13,
+    paddingHorizontal: 15,
+    borderWidth: 1.5,
+    borderRadius: 8,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    backgroundColor: 'rgba(0,121,107,0.03)',
+  },
+  pharmacyBtnTxt: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
 });
