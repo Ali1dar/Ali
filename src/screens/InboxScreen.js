@@ -10,7 +10,6 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
   const [chats, setChats] = useState([]);
   const listenerRef = useRef(null);
 
-  // دالة مساعدة لتنسيق الوقت بشكل مقروء ومقاوم للأخطاء
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
     try {
@@ -32,7 +31,6 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
 
     const ref = db.ref('chats');
     
-    // الغاء المستمع القديم فوراً لو وجد لمنع تسريب الذاكرة
     if (listenerRef.current) {
       ref.off('value', listenerRef.current);
     }
@@ -44,33 +42,24 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
 
       snap.forEach(child => {
         const id = child.key;
-        
-        // التحقق الذكي والمقاوم للأخطاء من تبعية المحادثة للمستخدم الحالي
         if (!id.includes(uid)) return;
 
         let otherUserId = '';
         const parts = id.split('_');
 
-        // 🛠️ تصحيح تفكيك المعرفات لدعم الـ Direct Chats والـ Request Chats دون إنتاج undefined
         if (parts[0] === 'p' && parts.length >= 3) {
-          // حالة المحادثة المباشرة p_patientUid_pharmacyUid
           otherUserId = role === 'pharmacy' ? parts[1] : parts[2];
         } else {
-          // حالة طلب روشتة عامة: المعرف قد لا يحتوي على تركيب الـ Direct
-          // نأخذ الـ UID المقابل للـ UID الحالي من تفرعات المحادثة نفسها
           const childData = child.val() || {};
           const branchKeys = Object.keys(childData).filter(k => k !== 'unreadPharmacy' && k !== 'unreadPatient');
           
           if (role === 'pharmacy') {
-            // الصيدلي يبحث عن معرف المريض (الذي لا يساوي الـ uid الخاص بالصيدلية)
             otherUserId = branchKeys.find(k => k !== uid) || parts[1] || '';
           } else {
-            // المريض يبحث عن معرف الصيدلية
             otherUserId = branchKeys.find(k => k === id || k !== uid) || parts[2] || '';
           }
         }
 
-        // تصفية القيم والتأكد من عدم تمرير نص "undefined" كمتغير ميت
         if (!otherUserId || otherUserId === 'undefined') return;
 
         const branchKey = role === 'pharmacy' ? uid : otherUserId;
@@ -94,7 +83,6 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
         const entry = { id, preview, unread, otherUserId, otherName: 'جاري التحميل...', lastTime };
         arr.push(entry);
 
-        // جلب الأسماء بشكل متوازي ومحمي من الانهيار
         ps.push(
           db.ref(`users/${otherUserId}`).once('value').then(s => {
             const val = s.val();
@@ -113,10 +101,7 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
       });
 
       await Promise.all(ps);
-      
-      // ترتيب زمني صارم: الأحدث يظهر أولاً
       arr.sort((a, b) => (b.lastTime || 0) - (a.lastTime || 0));
-      
       setChats(arr);
     });
 
@@ -146,13 +131,10 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
           data={chats}
           keyExtractor={item => item.id}
           contentContainerStyle={{ padding: 15, gap: 10 }}
-          
-          // 🔥 خصائص الأداء العالي لإنهاء تعليق الواجهة الفوري المستقر
           initialNumToRender={10}
           maxToRenderPerBatch={5}
           windowSize={5}
           removeClippedSubviews={Platform.OS === 'android'}
-          
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[
@@ -160,7 +142,8 @@ export default function InboxScreen({ visible, onClose, onOpenChat, role }) {
                 { backgroundColor: theme.cardBg || '#fff', borderColor: item.unread > 0 ? '#e53935' : (theme.border || '#ccc') },
                 item.unread > 0 && { borderRightWidth: 5, borderRightColor: '#e53935' }
               ]}
-              onPress={() => onOpenChat(item.id)}
+              // 🚀 تم الضبط هنا لتمرير الـ otherUserId بدقة متناهية لشاشة المحادثات
+              onPress={() => onOpenChat(item.id, item.preview, item.otherUserId)}
             >
               <View style={{ flex: 1 }}>
                 <View style={st.rowHeader}>
