@@ -37,7 +37,7 @@ function AppContent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [nearbyOpen, setNearbyOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [patientInboxOpen, setPatientInboxOpen] = useState(false); // ✅ التغيير 1
+  const [patientInboxOpen, setPatientInboxOpen] = useState(false);
   const [subBlock, setSubBlock] = useState({ show: false, msg: '' });
   const [province, setProvince] = useState('بغداد');
   const [globalUnread, setGlobalUnread] = useState(false);
@@ -82,41 +82,25 @@ function AppContent() {
     return () => backHandler.remove();
   }, []);
 
-  // 🕒 آلية الحذف التلقائي الذكي للطلبات والمحادثات المرتبطة بها
   useEffect(() => {
     if (!user) return;
-
-    // 48 ساعة بالملي ثانية = 172800000
     const FORTY_EIGHT_HOURS = 172800000;
     const expirationLimit = Date.now() - FORTY_EIGHT_HOURS;
-
-    // جلب مسار الطلبات بالكامل لفحصه وتنظيفه
     const requestsRef = db.ref('requests');
     
     requestsRef.once('value').then(snapshot => {
       if (snapshot.exists()) {
         snapshot.forEach(provinceSnapshot => {
           const provKey = provinceSnapshot.key;
-          
           provinceSnapshot.forEach(requestSnapshot => {
             const reqData = requestSnapshot.val();
             const reqId = requestSnapshot.key;
-            
             if (reqData) {
-              // 1. فحص ما إذا كان الطلب منتهياً (مر عليه 48 ساعة)
               const hasExpired = reqData.createdAt && reqData.createdAt < expirationLimit;
-              
-              // 2. فحص ما إذا كان الطلب قديماً جداً ولا يحتوي على حقل الوقت أصلاً لضمان مسحه
               const isLegacyWithoutDate = !reqData.createdAt;
-
-              // إذا تحقق أي من الشرطين يتم تفعيل الحذف النهائي للطلب والمحادثة
               if (hasExpired || isLegacyWithoutDate) {
-                // حذف الطلب نهائياً من المحافظة الخاصة به
                 db.ref(`requests/${provKey}/${reqId}`).remove();
-                
-                // حذف المحادثة التابعة للطلب مباشرة
                 db.ref(`chats/${reqId}`).remove();
-                
                 console.log(`[تنظيف تلقائي] تم حذف الطلب والمحادثة للمعرف: ${reqId}`);
               }
             }
@@ -124,7 +108,6 @@ function AppContent() {
         });
       }
     }).catch(err => console.log("خطأ أثناء التنظيف التلقائي للطلبات:", err));
-
   }, [user]);
 
   useEffect(() => {
@@ -174,9 +157,11 @@ function AppContent() {
     else setSubBlock({ show: false, msg: '' });
   };
 
+  // 🔥 تم الإصلاح التام: استدعاء التوجيه بالصيدلية المستهدفة المكتشفة ديناميكياً من قائمة الطلبات
   const openChat = (id, name, pid = null) => {
     setChatId(id);
     setChatName(name);
+    // إذا أرسل المريض معرف صيدلية لديها رسائل غير مقروءة نستخدمه فوراً، وإلا نعتمد الوضع التلقائي الافتراضي
     setChatPid(pid || (userData?.role === 'pharmacy' ? user?.uid : null));
     setChatOpen(true);
   };
@@ -263,7 +248,7 @@ function AppContent() {
             <PatientScreen
               onOpenChat={openChat}
               onOpenNearby={() => setNearbyOpen(true)}
-              onOpenInbox={() => setPatientInboxOpen(true)} // ✅ التغيير 3
+              onOpenInbox={() => setPatientInboxOpen(true)}
               onToast={showToast}
               province={province}
               onProvinceChange={changeProvince}
@@ -280,6 +265,7 @@ function AppContent() {
         </View>
       )}
 
+      {/* 🚀 تم التعديل: هنا يستقبل الشات الـ chatPid الذي تم تجهيزه ودفعه تلقائياً */}
       <ChatScreen
         visible={chatOpen} onClose={() => setChatOpen(false)}
         chatId={chatId} pharmacyId={chatPid}
@@ -294,7 +280,7 @@ function AppContent() {
         visible={nearbyOpen} onClose={() => setNearbyOpen(false)}
         province={province} onDirectChat={openDirectChat}
       />
-      {/* ✅ InboxScreen الصيدلية */}
+      
       <InboxScreen
         visible={inboxOpen}
         onClose={() => setInboxOpen(false)}
@@ -307,7 +293,7 @@ function AppContent() {
           setChatOpen(true);
         }}
       />
-      {/* ✅ InboxScreen المريض */}
+      
       <InboxScreen
         visible={patientInboxOpen}
         onClose={() => setPatientInboxOpen(false)}
