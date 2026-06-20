@@ -7,7 +7,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
-import { db, firebaseAuth, formatLastSeen } from '../utils/firebase';
+import { db, firebaseAuth } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 
 // 🕒 تحويل الـ timestamp إلى وقت (ساعة:دقيقة م/ص) بشكل آمن
@@ -195,6 +195,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const [userStatus, setUserStatus] = useState('');
   const [tabs, setTabs] = useState([]);
   const [tabNames, setTabNames] = useState({});
+  const [tabUnreads, setTabUnreads] = useState({}); // 🔥 إضافة حالة جديدة لمراقبة الرسائل غير المقروءة لكل تاب صيدلية
   const [activeTab, setActiveTab] = useState(null);
   const [selectedImg, setSelectedImg] = useState(null);
   const [imgModalVisible, setImgModalVisible] = useState(false);
@@ -206,6 +207,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const slideAnim = useRef(new Animated.Value(700)).current;
   const msgRef = useRef(null);
   const presenceRef = useRef(null);
+  const tabsListenerRef = useRef(null); // 🔥 مرجع مستمع التابات الحيّة لتفادي التسريبات
   const recTimerRef = useRef(null);
   const statusIntervalRef = useRef(null);
 
@@ -257,17 +259,19 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
     if (msgRef.current) { msgRef.current(); msgRef.current = null; }
     if (presenceRef.current) { presenceRef.current(); presenceRef.current = null; }
+    if (tabsListenerRef.current) { tabsListenerRef.current(); tabsListenerRef.current = null; }
     clearInterval(statusIntervalRef.current);
 
     if (visible && chatId) {
       setTabs([]);
       setTabNames({});
+      setTabUnreads({});
       setMessages([]);
       setActiveTab(null);
       setUserStatus('جاري التحميل...');
 
       if (role === 'patient' && !isDirectChat) {
-        loadTabs(isMounted);
+        startListenTabs(isMounted); // 🔥 تحويل جلب التابات إلى مستمع حي فوري وثابت
       } else {
         const currentPid = role === 'pharmacy' ? myUid : pharmacyId;
         setActiveTab(currentPid);
@@ -278,6 +282,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       isMounted = false;
       if (msgRef.current) msgRef.current(); 
       if (presenceRef.current) presenceRef.current();
+      if (tabsListenerRef.current) tabsListenerRef.current();
       clearInterval(statusIntervalRef.current);
     };
   }, [visible, chatId]);
@@ -298,21 +303,60 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     }
   }, [visible]);
 
-  const loadTabs = async (isMounted) => {
-    const snap = await db.ref(`chats/${chatId}`).once('value');
-    if (!snap.exists() || !isMounted) return;
-    const ids = []; const names = {};
-    const ps = [];
-    snap.forEach(c => {
-      if (!['unreadPharmacy', 'unreadPatient'].includes(c.key)) {
-        ids.push(c.key);
-        ps.push(db.ref(`users/${c.key}`).once('value').then(s => { names[c.key] = s.val()?.pharmacyName || `صيدلية(${c.key.slice(0, 5)})`; }));
+  // 🔥 تم التعديل والجلب الحي: الاستماع المباشر لهيكلية المحادثة وتحديث شارات غير المقروء للتابات لحظياً
+  const startListenTabs = (isMounted) => {
+    const ref = db.ref(`chats/${chatId}`);
+    
+    const listener = ref.on('value', async (snap) => {
+      if (!snap.exists() || !isMounted) return;
+      
+      const ids = [];
+      const unreads = {};
+      const names = { ...tabNames };
+      const ps = [];
+
+      snap.forEach(c => {
+        if (!['unreadPharmacy', 'unreadPatient'].includes(c.key)) {
+          const pid = c.key;
+          ids.push(pid);
+          
+          // قراءة عداد المريض غير المقروء لهذه الصيدلية
+          unreads[pid] = c.val()?.unreadPatient || 0;
+          
+          // جلب اسم الصيدلية إن لم يكن مسجلاً مسبقاً في الـ state
+          if (!names[pid]) {
+            ps.push(
+              db.ref(`users/${pid}`).once('value').then(s => {
+                names[pid] = s.val()?.pharmacyName || `صيدلية(${pid.slice(0, 5)})`;
+              })
+            );
+          }
+        }
+      });
+
+      if (ps.length > 0) {
+        await Promise.all(ps);
+      }
+      
+      if (!isMounted) return;
+      
+      setTabs(ids);
+      setTabNames(names);
+      setTabUnreads(unreads);
+
+      // إذا كانت التابات محملة لأول مرة ولم يتم تحديد تاب نشط، نفتح التاب الأول المتاح تلقائياً
+      // أو إذا تم تحديد صيدلية قادمة كـ InitialPharmacyId من الواجهة الخارجية
+      if (!activeTab) {
+        const targetPid = pharmacyId && ids.includes(pharmacyId) ? pharmacyId : ids[0];
+        if (targetPid) {
+          setActiveTab(targetPid);
+          db.ref(`chats/${chatId}/${targetPid}/unreadPatient`).set(0);
+          startListen(chatId, targetPid);
+        }
       }
     });
-    await Promise.all(ps);
-    if (!isMounted) return;
-    setTabs(ids); setTabNames(names);
-    if (ids[0]) selectTab(ids[0]);
+
+    tabsListenerRef.current = () => ref.off('value', listener);
   };
 
   const selectTab = (pid) => {
@@ -326,7 +370,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0);
     else db.ref(`chats/${cId}/${pid}/unreadPatient`).set(0);
 
-    // 🛠️ تم الإصلاح الجذري: جلب آخر 40 رسالة لمنع التأخير والتعليق في الشبكة والأجهزة المتوسطة
     const ref = db.ref(`chats/${cId}/${pid}/messages`).limitToLast(40);
 
     const listener = ref.on('value', snap => {
@@ -337,7 +380,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           if (msgData.role !== role && !msgData.seen) {
             db.ref(`chats/${cId}/${pid}/messages/${c.key}/seen`).set(true);
           }
-          // 🛠️ تم الإصلاح الجذري: استخدام unshift لصف الأحدث في البداية ليتوافق مع الـ FlatList المقلوبة
           arr.unshift({ id: c.key, ...msgData });
         });
       }
@@ -492,7 +534,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     }
   };
 
-  // 🛠️ تم الإصلاح: تصحيح الرابط القياسي المباشر لخرائط جوجل بدون نصوص معطلة لفتح التطبيق الخارجي فوراً
   const sendLocation = async () => {
     if (!chatId || !activePid) return;
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -551,8 +592,23 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         <ScrollView horizontal style={[st.tabsBar, { borderBottomColor: theme?.border || '#ccc', backgroundColor: theme?.bg || '#f9f9f9' }]} showsHorizontalScrollIndicator={false}>
           {tabs.map(tid => (
             <TouchableOpacity key={tid}
-              style={[st.tabBtn, { borderColor: theme?.border || '#ccc', backgroundColor: activeTab === tid ? (theme?.primary || '#00796b') : (theme?.cardBg || '#fff') }]}
+              style={[
+                st.tabBtn, 
+                { 
+                  borderColor: tabUnreads[tid] > 0 ? '#e53935' : (theme?.border || '#ccc'), 
+                  backgroundColor: activeTab === tid ? (theme?.primary || '#00796b') : (theme?.cardBg || '#fff'),
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6
+                }
+              ]}
               onPress={() => selectTab(tid)}>
+              
+              {/* 🔥 حقن النقطة الحمراء بجانب اسم الصيدلية فوراً إذا كانت القيمة أكبر من 0 */}
+              {tabUnreads[tid] > 0 && (
+                <View style={st.tabRedDot} />
+              )}
+
               <Text style={{ color: activeTab === tid ? 'white' : (theme?.text || '#000'), fontWeight: 'bold', fontSize: 12 }}>
                 {tabNames[tid] || tid.slice(0, 8)}
               </Text>
@@ -568,15 +624,11 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           keyExtractor={i => i.id || String(Math.random())}
           style={[st.msgList, { backgroundColor: theme?.chatBg || '#efeae2' }]}
           contentContainerStyle={{ padding: 14, paddingBottom: 20 }}
-          
-          // 🔥 الميزتان السحريتان: تمكين فتح الدردشة فوراً على آخر رسالة بثبات ومقاومة القفز المزعج
           inverted
-          
           renderItem={({ item }) => {
             const isMe = item.role === role;
             const defaultBg = isMe ? (theme?.primary || '#00796b') : '#dcf8c6';
             
-            // 🛠️ تم التعديل: مطابقة الاتجاهات مع الـ FlatList المقلوبة (isMe يمين والآخر يسار)
             return (
               <View style={[st.msgWrap, isMe ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
                 <TouchableOpacity 
@@ -754,6 +806,7 @@ const mkStyles = (t) => StyleSheet.create({
   statusTxt: { color: '#b2dfdb', fontSize: 11, marginTop: 2, fontWeight: '500' },
   tabsBar: { maxHeight: 54, borderBottomWidth: 1, paddingHorizontal: 10 },
   tabBtn: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 20, borderWidth: 1, marginRight: 8, marginVertical: 8 },
+  tabRedDot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#e53935' }, // 🔥 تصميم النقطة التنبيهية الحمراء
   msgList: { flex: 1 },
   msgWrap: { marginBottom: 8 },
   bubble: { maxWidth: '78%', padding: 9, borderRadius: 12 },
