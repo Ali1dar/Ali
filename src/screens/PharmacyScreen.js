@@ -4,13 +4,34 @@ import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, Alert, Modal
 import { db, firebaseAuth } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 
+// 🌐 دالة حساب المسافة الحقيقية بين الصيدلية والمريض (Haversine Formula) بالكيلومترات
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  try {
+    const R = 6371; // نصف قطر كوكب الأرض بالكيلومترات
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c;
+    return distance.toFixed(1); // إرجاع المسافة مع تقريب لرقم عشري واحد (مثل: 2.4)
+  } catch (e) {
+    return null;
+  }
+};
+
 export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacyName, userId }) {
   const { theme } = useTheme();
   const [requests, setRequests] = useState([]);
   const [patientNames, setPatientNames] = useState({});
   const [dots, setDots] = useState({});
   
-  // 🔴 حالتان للتحكم في نافذة تكبير صورة الوصفة الطبية لقائمة الطلبات
+  // 📍 حفظ إحداثيات موقع الصيدلية الحالية المسترجعة من السيرفر
+  const [pharmacyCoords, setPharmacyCoords] = useState({ lat: null, lon: null });
+  
   const [selectedImg, setSelectedImg] = useState(null);
   const [imgModalVisible, setImgModalVisible] = useState(false);
 
@@ -43,6 +64,20 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
       return '';
     }
   };
+
+  // 🛠️ جلب موقع الصيدلية الحالية أولاً لإنشاء مرجع حساب المسافة للطلبات القادمة
+  useEffect(() => {
+    if (!userId) return;
+    db.ref(`users/${userId}/location`).once('value', snap => {
+      if (snap.exists()) {
+        const loc = snap.val();
+        setPharmacyCoords({
+          lat: loc.latitude || loc.lat,
+          lon: loc.longitude || loc.lon
+        });
+      }
+    });
+  }, [userId]);
 
   useEffect(() => {
     if (!province) return;
@@ -83,7 +118,6 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
     ]);
   };
 
-  // دالة لفتح تكبير الصورة عند الضغط عليها
   const handleOpenImage = (imgUri) => {
     setSelectedImg(imgUri);
     setImgModalVisible(true);
@@ -110,22 +144,39 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
             contentContainerStyle={{ padding: 15, paddingBottom: 100 }}
             renderItem={({ item }) => {
               const b = badge(item.status);
-              const dist = isNaN(item.distance) ? item.distance : `${item.distance} كم`;
+              
+              // 🛠️ معالجة المسافة: فحص وحساب الإحداثيات الحقيقية ديناميكياً وعرضها بنص مفهوم للمستخدم
+              let displayDistance = 'غير محدد';
+              const calculated = calculateDistance(
+                pharmacyCoords.lat, 
+                pharmacyCoords.lon, 
+                item.latitude || item.lat, 
+                item.longitude || item.lon
+              );
+
+              if (calculated) {
+                displayDistance = `تبعد ${calculated} كم`;
+              } else if (item.distance && isNaN(item.distance)) {
+                displayDistance = item.distance;
+              } else if (item.distance) {
+                displayDistance = `تبعد ${item.distance} كم`;
+              }
+
               return (
                 <View style={[st.item, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
                   <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
                     
-                    {/* 🔴 جعل صورة الطلب قابلة للنقر لتكبيرها بملء الشاشة */}
-                    {item.image ? (
-                      <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
-                        <Image source={{ uri: item.image }} style={{ width: 55, height: 55, borderRadius: 8, borderWidth: 1, borderColor: theme.border }} />
-                      </TouchableOpacity>
-                    ) : null}
+                    {if (item.image) {
+                      return (
+                        <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
+                          <Image source={{ uri: item.image }} style={{ width: 55, height: 55, borderRadius: 8, borderWidth: 1, borderColor: theme.border }} />
+                        </TouchableOpacity>
+                      );
+                    }}
 
                     <View style={{ flex: 1 }}>
                       <Text style={[st.medName, { color: theme.text }]}>{item.name}</Text>
                       
-                      {/* 🕒 سطر تفاصيل المريض والوقت بشكل متقابل ومتناسق */}
                       <View style={st.patientRow}>
                         <Text style={[st.timeText, { color: theme.subText }]}>
                           🕒 {formatTime(item.createdAt)}
@@ -139,12 +190,15 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
                         <View style={{ backgroundColor: b.b, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 4 }}>
                           <Text style={{ color: b.c, fontSize: 11, fontWeight: 'bold' }}>{b.t}</Text>
                         </View>
+                        
+                        {/* 🛠️ تم التعديل: إظهار المسافة الحسابية المقروءة والمفهومة بجانب أيقونة الموقع الجغرافي */}
                         <View style={{ backgroundColor: 'rgba(0,121,107,0.1)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 4 }}>
-                          <Text style={{ color: theme.primary, fontSize: 11 }}>📍 {dist}</Text>
+                          <Text style={{ color: theme.primary, fontSize: 11, fontWeight: '500' }}>📍 {displayDistance}</Text>
                         </View>
                       </View>
                     </View>
                   </View>
+                  
                   <View style={st.actions}>
                     <TouchableOpacity style={[st.btn, { backgroundColor: '#4caf50' }]} onPress={() => updateStatus(item.id, 'available')}>
                       <Text style={st.btnTxt}>✓ متوفر</Text>
@@ -165,7 +219,6 @@ export default function PharmacyScreen({ onOpenChat, onToast, province, pharmacy
           />
       }
 
-      {/* 🔴 واجهة عارض الصور بملء الشاشة المدمجة للطلبات */}
       <Modal visible={imgModalVisible} transparent={true} animationType="fade" onRequestClose={() => { setImgModalVisible(false); setSelectedImg(null); }}>
         <View style={st.modalBackground}>
           <TouchableOpacity style={st.closeImgBtn} onPress={() => { setImgModalVisible(false); setSelectedImg(null); }}>
@@ -194,7 +247,6 @@ const mkStyles = (t) => StyleSheet.create({
   btn: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 6 },
   btnTxt: { color: 'white', fontWeight: 'bold', fontSize: 11 },
   
-  // 🔴 ستايلات عارض صورة الطلب بكامل الشاشة
   modalBackground: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
   closeImgBtn: { position: 'absolute', top: Platform.OS === 'android' ? 40 : 55, right: 25, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.25)', width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center' },
   closeImgTxt: { color: 'white', fontSize: 32, fontWeight: '300', marginTop: -4 },
