@@ -1,4 +1,4 @@
-here// src/screens/NearbyScreen.js
+// src/screens/NearbyScreen.js
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
@@ -13,6 +13,16 @@ export default function NearbyScreen({ visible, onClose, province, onDirectChat 
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const pharmaciesQueryRef = useRef(null);
+  const isMountedRef = useRef(true);
+
+  // ✅ إضافة cleanup على unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      cleanUpListener();
+    };
+  }, []);
 
   useEffect(() => {
     if (visible && province) loadNearbyPharmacies();
@@ -20,28 +30,41 @@ export default function NearbyScreen({ visible, onClose, province, onDirectChat 
   }, [visible, province]);
 
   const loadNearbyPharmacies = () => {
-    cleanUpListener();
-    setLoading(true);
-    const q = db.ref('users').orderByChild('role').equalTo('pharmacy');
-    pharmaciesQueryRef.current = q;
-    q.on('value', snap => {
-      let arr = [];
-      if (snap.exists()) {
-        snap.forEach(c => {
-          const d = c.val();
-          if (d.province === province) arr.push({ id: c.key, ...d });
-        });
-      }
+    try {
+      cleanUpListener();
+      setLoading(true);
+      const q = db.ref('users').orderByChild('role').equalTo('pharmacy');
+      pharmaciesQueryRef.current = q;
+      q.on('value', snap => {
+        // ✅ تحقق من isMounted
+        if (!isMountedRef.current) return;
 
-      // الترتيب فقط حسب حقل priority — لا علاقة له بالنجوم
-      arr.sort((a, b) => (a.priority || 999) - (b.priority || 999));
+        try {
+          let arr = [];
+          if (snap.exists()) {
+            snap.forEach(c => {
+              const d = c.val();
+              if (d && d.province === province) arr.push({ id: c.key, ...d });
+            });
+          }
 
-      setPharmacies(arr);
-      setLoading(false);
-    }, error => {
-      console.log("خطأ:", error);
-      setLoading(false);
-    });
+          // الترتيب فقط حسب حقل priority
+          arr.sort((a, b) => (a.priority || 999) - (b.priority || 999));
+
+          setPharmacies(arr);
+          setLoading(false);
+        } catch (err) {
+          console.error('خطأ في معالجة البيانات:', err);
+          if (isMountedRef.current) setLoading(false);
+        }
+      }, error => {
+        console.error('خطأ Firebase:', error);
+        if (isMountedRef.current) setLoading(false);
+      });
+    } catch (err) {
+      console.error('خطأ في loadNearbyPharmacies:', err);
+      if (isMountedRef.current) setLoading(false);
+    }
   };
 
   const cleanUpListener = () => {
@@ -56,40 +79,57 @@ export default function NearbyScreen({ visible, onClose, province, onDirectChat 
     : pharmacies.filter(ph =>
         (ph.pharmacyName || '').toLowerCase().includes(searchQuery.toLowerCase())
       );
-  // الترتيب محفوظ من loadNearbyPharmacies، لا نعيد الترتيب هنا
 
-  const openMap = (item) => {
-    if (!item.lat || !item.lng) {
-      Alert.alert('تنبيه', 'هذه الصيدلية لم تحدد موقعها بعد');
-      return;
-    }
-    const name = encodeURIComponent(item.pharmacyName || 'الصيدلية');
-    const url = Platform.OS === 'ios'
-      ? `maps:0,0?q=${name}@${item.lat},${item.lng}`
-      : `geo:${item.lat},${item.lng}?q=${item.lat},${item.lng}(${name})`;
-    Linking.canOpenURL(url).then(supported => {
-      Linking.openURL(supported ? url
-        : `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}`);
-    });
-  };
-
-  // ✅ النجوم مستقلة تماماً عن الترتيب
-  // priorityType = '1' | '2' | '3' | '4' | '5' | 'none' | undefined
-  // priorityExpiry = timestamp — إذا انتهى لا تُظهر النجوم
+  // ✅ تصحيح دالة النجوم — آمنة من الأخطاء
   const getStars = (item) => {
-    const n = parseInt(item.priorityType) || 0;
-    if (n === 0 || item.priorityType === 'none') return null;
+    try {
+      const n = parseInt(item.priorityType) || 0;
+      if (n === 0 || item.priorityType === 'none') return null;
 
-    // تحقق من انتهاء الصلاحية
-    if (item.priorityExpiry && item.priorityExpiry !== -1 && item.priorityExpiry < Date.now()) {
+      // تحقق من انتهاء الصلاحية
+      if (item.priorityExpiry && item.priorityExpiry !== -1 && item.priorityExpiry < Date.now()) {
+        return null;
+      }
+
+      // بناء النجوم بطريقة آمنة
+      let stars = '';
+      for (let i = 1; i <= 5; i++) {
+        stars += i <= n ? '★' : '☆';
+      }
+      return stars;
+    } catch (err) {
+      console.error('خطأ في getStars:', err);
       return null;
     }
+  };
 
-    let stars = '';
-    for (let i = 1; i <= 5; i++) {
-      stars += i <= n ? '★' : '☆';
+  const openMap = (item) => {
+    try {
+      if (!item.lat || !item.lng) {
+        Alert.alert('تنبيه', 'هذه الصيدلية لم تحدد موقعها بعد');
+        return;
+      }
+      const name = encodeURIComponent(item.pharmacyName || 'الصيدلية');
+      const url = Platform.OS === 'ios'
+        ? `maps:0,0?q=${name}@${item.lat},${item.lng}`
+        : `geo:${item.lat},${item.lng}?q=${item.lat},${item.lng}(${name})`;
+      
+      Linking.canOpenURL(url)
+        .then(supported => {
+          if (supported) {
+            return Linking.openURL(url);
+          } else {
+            return Linking.openURL(
+              `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}`
+            );
+          }
+        })
+        .catch(err => {
+          console.error('خطأ في Linking:', err);
+        });
+    } catch (err) {
+      console.error('خطأ في openMap:', err);
     }
-    return stars;
   };
 
   const st = mkStyles(theme);
@@ -157,16 +197,10 @@ export default function NearbyScreen({ visible, onClose, province, onDirectChat 
             return (
               <View style={[st.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
 
-                {/* ✅ النجوم — مستقلة عن الترتيب، تظهر فقط إذا كان priorityType نشطاً */}
+                {/* ✅ النجوم — مع معالجة آمنة */}
                 {stars && (
                   <View style={st.starsRow}>
-                    <Text style={st.starsFilled}>
-                      {stars.split('').map((s, i) =>
-                        s === '★'
-                          ? <Text key={i} style={st.starOn}>{s}</Text>
-                          : <Text key={i} style={st.starOff}>{s}</Text>
-                      )}
-                    </Text>
+                    <Text style={st.starsText}>{stars}</Text>
                   </View>
                 )}
 
@@ -253,23 +287,21 @@ const mkStyles = (t) => StyleSheet.create({
     marginBottom: 12, alignItems: 'flex-end'
   },
 
-  // ✅ النجوم — صف مستقل في أعلى البطاقة
   starsRow: {
     alignSelf: 'flex-end',
     marginBottom: 8,
     flexDirection: 'row',
   },
-  starsFilled: {
+  starsText: {
     fontSize: 18,
     letterSpacing: 2,
+    color: '#f59e0b',
   },
-  starOn:  { color: '#f59e0b' },   // ذهبي
-  starOff: { color: '#d1d5db' },   // رمادي فاتح
 
   cardInfo: { width: '100%', alignItems: 'flex-end', paddingRight: 5 },
   pharmacyName: { fontWeight: 'bold', fontSize: 15, textAlign: 'right' },
   pharmacyDetails: { fontSize: 12, marginTop: 4, textAlign: 'right' },
-  locationSet:   { color: '#00796b', fontSize: 11, marginTop: 4, fontWeight: 'bold' },
+  locationSet: { color: '#00796b', fontSize: 11, marginTop: 4, fontWeight: 'bold' },
   locationUnset: { fontSize: 11, marginTop: 4 },
 
   khofraBadge: {
