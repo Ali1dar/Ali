@@ -61,7 +61,8 @@
           "microphonePermission": "يرجى السماح باستخدام الميكروفون لإرسال رسائل صوتية"
         }
       ],
-      "expo-updates"
+      "expo-updates",
+      "expo-font"
     ],
     "extra": {
       "eas": {
