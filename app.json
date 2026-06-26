@@ -18,7 +18,7 @@
       "policy": "appVersion"
     },
     "android": {
-      "versionCode": 3,
+      "versionCode": 4,
       "targetSdkVersion": 35,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
