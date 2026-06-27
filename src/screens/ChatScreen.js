@@ -31,7 +31,7 @@ function AudioPlayer({ uri, isMe, timestamp, seen }) {
 
   useEffect(() => {
     return () => {
-      if (sound) sound.unloadAsync();
+      if (sound) sound.unloadAsync().catch(() => {});
       clearInterval(intervalRef.current);
     };
   }, [sound]);
@@ -51,7 +51,15 @@ function AudioPlayer({ uri, isMe, timestamp, seen }) {
         }
         return;
       }
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      
+      // ✅ تعديل إعدادات الصوت لتتوافق مع معايير إكسبو الحديثة بدون كراش
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldRouteThroughEarpieceIOS: false
+      }).catch(e => console.log(e));
+
       const { sound: s, status } = await Audio.Sound.createAsync(
         { uri },
         { shouldPlay: true, rate, shouldCorrectPitch: true }
@@ -65,7 +73,7 @@ function AudioPlayer({ uri, isMe, timestamp, seen }) {
           setPlaying(false);
           setPosition(0);
           clearInterval(intervalRef.current);
-          s.unloadAsync();
+          s.unloadAsync().catch(() => {});
           setSound(null);
         }
       });
@@ -77,15 +85,15 @@ function AudioPlayer({ uri, isMe, timestamp, seen }) {
   const startTracking = (s) => {
     clearInterval(intervalRef.current);
     intervalRef.current = setInterval(async () => {
-      const st = await s.getStatusAsync();
-      if (st.isLoaded) setPosition(st.positionMillis || 0);
+      const st = await s.getStatusAsync().catch(() => {});
+      if (st && st.isLoaded) setPosition(st.positionMillis || 0);
     }, 300);
   };
 
   const toggleRate = async () => {
     const newRate = rate === 1.0 ? 1.5 : rate === 1.5 ? 2.0 : 1.0;
     setRate(newRate);
-    if (sound) await sound.setRateAsync(newRate, true);
+    if (sound) await sound.setRateAsync(newRate, true).catch(() => {});
   };
 
   const fmtTime = (ms) => {
@@ -180,8 +188,6 @@ const ri = StyleSheet.create({
 
 export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role, requestName, localRequests, onToast }) {
   const { theme } = useTheme();
-  
-  // ✅ إضافة insets لقراءة حدود الشاشة الآمنة
   const insets = useSafeAreaInsets();
   
   const [messages, setMessages] = useState([]);
@@ -210,7 +216,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const myUid = firebaseAuth.currentUser?.uid;
   const isDirectChat = chatId?.startsWith('p_');
   const activePid = role === 'pharmacy' ? myUid : (isDirectChat ? pharmacyId : (activeTab || pharmacyId));
-  const st = mkStyles(theme, insets); // ✅ تمرير insets للـ styles
+  const st = mkStyles(theme, insets);
 
   const formatTimeAgo = (timestamp) => {
     if (!timestamp) return 'غير متصل';
@@ -237,13 +243,13 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     if (!myUid) return;
     const pRef = db.ref(`users/${myUid}/presence`);
     if (visible) {
-      pRef.set({ online: true, lastSeen: Date.now() });
-      pRef.onDisconnect().set({ online: false, lastSeen: Date.now() });
+      pRef.set({ online: true, lastSeen: Date.now() }).catch(() => {});
+      pRef.onDisconnect().set({ online: false, lastSeen: Date.now() }).catch(() => {});
     } else {
-      pRef.set({ online: false, lastSeen: Date.now() });
+      pRef.set({ online: false, lastSeen: Date.now() }).catch(() => {});
     }
     return () => {
-      if (!visible) pRef.set({ online: false, lastSeen: Date.now() });
+      if (!visible) pRef.set({ online: false, lastSeen: Date.now() }).catch(() => {});
     };
   }, [visible, myUid]);
 
@@ -310,12 +316,12 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
             ps.push(
               db.ref(`users/${pid}`).once('value').then(s => {
                 names[pid] = s.val()?.pharmacyName || `صيدلية(${pid.slice(0, 5)})`;
-              })
+              }).catch(() => {})
             );
           }
         }
       });
-      if (ps.length > 0) await Promise.all(ps);
+      if (ps.length > 0) await Promise.all(ps).catch(() => {});
       if (!isMounted) return;
       setTabs(ids);
       setTabNames(names);
@@ -324,7 +330,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         const targetPid = pharmacyId && ids.includes(pharmacyId) ? pharmacyId : ids[0];
         if (targetPid) {
           setActiveTab(targetPid);
-          db.ref(`chats/${chatId}/${targetPid}/unreadPatient`).set(0);
+          db.ref(`chats/${chatId}/${targetPid}/unreadPatient`).set(0).catch(() => {});
           startListen(chatId, targetPid);
         }
       }
@@ -334,14 +340,14 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   const selectTab = (pid) => {
     setActiveTab(pid);
-    db.ref(`chats/${chatId}/${pid}/unreadPatient`).set(0);
+    db.ref(`chats/${chatId}/${pid}/unreadPatient`).set(0).catch(() => {});
     startListen(chatId, pid);
   };
 
   const startListen = (cId, pid) => {
     if (msgRef.current) msgRef.current();
-    if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0);
-    else db.ref(`chats/${cId}/${pid}/unreadPatient`).set(0);
+    if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0).catch(() => {});
+    else db.ref(`chats/${cId}/${pid}/unreadPatient`).set(0).catch(() => {});
     const ref = db.ref(`chats/${cId}/${pid}/messages`).limitToLast(40);
     const listener = ref.on('value', snap => {
       const arr = [];
@@ -349,7 +355,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         snap.forEach(c => {
           const msgData = c.val();
           if (msgData.role !== role && !msgData.seen) {
-            db.ref(`chats/${cId}/${pid}/messages/${c.key}/seen`).set(true);
+            db.ref(`chats/${cId}/${pid}/messages/${c.key}/seen`).set(true).catch(() => {});
           }
           arr.unshift({ id: c.key, ...msgData });
         });
@@ -403,16 +409,16 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     if (!msg || !chatId || !activePid) return;
     setText('');
     if (isEditingMode && editingMsgId) {
-      await db.ref(`chats/${chatId}/${activePid}/messages/${editingMsgId}`).update({ text: msg, isEdited: true });
+      await db.ref(`chats/${chatId}/${activePid}/messages/${editingMsgId}`).update({ text: msg, isEdited: true }).catch(() => {});
       setIsEditingMode(false);
       setEditingMsgId(null);
       onToast('تم تعديل الرسالة');
     } else {
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-      await ref.set({ role, text: msg, timestamp: Date.now(), seen: false });
+      await ref.set({ role, text: msg, timestamp: Date.now(), seen: false }).catch(() => {});
       const cn = role === 'pharmacy' ? 'unreadPatient' : 'unreadPharmacy';
       const cr = db.ref(`chats/${chatId}/${activePid}/${cn}`);
-      cr.once('value').then(s => cr.set((s.val() || 0) + 1));
+      cr.once('value').then(s => cr.set((s.val() || 0) + 1)).catch(() => {});
       triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'رسالة من مريض', msg);
     }
   };
@@ -432,7 +438,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       onPress: async () => {
         await db.ref(`chats/${chatId}/${activePid}/messages/${item.id}`).update({
           text: '🚫 تم حذف هذه الرسالة', image: null, audio: null, locationUrl: null, isDeleted: true
-        });
+        }).catch(() => {});
         onToast('تم حذف الرسالة');
       }
     });
@@ -447,7 +453,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     if (!r.canceled && r.assets[0]) {
       const b64 = `data:image/jpeg;base64,${r.assets[0].base64}`;
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-      await ref.set({ role, image: b64, timestamp: Date.now(), seen: false });
+      await ref.set({ role, image: b64, timestamp: Date.now(), seen: false }).catch(() => {});
       onToast('تم إرسال الصورة');
       triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'مريض', '📷 أرسل صورة جديدة');
     }
@@ -456,12 +462,22 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const startRecording = async () => {
     const { status } = await Audio.requestPermissionsAsync();
     if (status !== 'granted') return onToast('يرجى السماح باستخدام الميكروفون', 'error');
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-    const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-    setRecording(rec);
-    setIsRecording(true);
-    setRecSeconds(0);
-    recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
+    
+    // ✅ تعديل إعدادات التسجيل لتتناسب مع متطلبات إكسبو الحديثة بأمان
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldRouteThroughEarpieceIOS: false
+    }).catch(e => console.log(e));
+
+    const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY).catch(() => ({}));
+    if (rec && rec.getURI) {
+      setRecording(rec);
+      setIsRecording(true);
+      setRecSeconds(0);
+      recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
+    }
   };
 
   const stopRecordingAndSend = async (doSend = true) => {
@@ -470,12 +486,12 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     setRecSeconds(0);
     if (!recording) return;
     try {
-      await recording.stopAndUnloadAsync();
+      await recording.stopAndUnloadAsync().catch(() => {});
       const uri = recording.getURI();
       setRecording(null);
       if (doSend && uri && chatId && activePid) {
         const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-        await ref.set({ role, audio: uri, timestamp: Date.now(), seen: false });
+        await ref.set({ role, audio: uri, timestamp: Date.now(), seen: false }).catch(() => {});
         onToast('تم إرسال الرسالة الصوتية 🎙️');
         triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'مريض', '🎙️ أرسل رسالة صوتية');
       }
@@ -493,7 +509,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       const loc = await Location.getCurrentPositionAsync({});
       const url = `https://maps.google.com/?q=${loc.coords.latitude},${loc.coords.longitude}`;
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-      await ref.set({ role, locationUrl: url, timestamp: Date.now(), seen: false });
+      await ref.set({ role, locationUrl: url, timestamp: Date.now(), seen: false }).catch(() => {});
       onToast('تم إرسال الموقع 📍');
       triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'مريض', '📍 أرسل موقعاً جغرافياً');
     } catch (err) {
@@ -504,9 +520,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const sendQuick = async (t) => {
     if (t.includes('سعر')) { setText(t); return; }
     const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-    await ref.set({ role: 'pharmacy', text: t, timestamp: Date.now(), seen: false });
+    await ref.set({ role: 'pharmacy', text: t, timestamp: Date.now(), seen: false }).catch(() => {});
     const cr = db.ref(`chats/${chatId}/${activePid}/unreadPatient`);
-    cr.once('value').then(s => cr.set((s.val() || 0) + 1));
+    cr.once('value').then(s => cr.set((s.val() || 0) + 1)).catch(() => {});
     triggerNotification('الصيدلية', t);
   };
 
@@ -524,7 +540,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   if (!visible) return null;
 
   return (
-    // ✅ إضافة paddingTop و paddingBottom من insets
     <Animated.View style={[st.container, {
       transform: [{ translateY: slideAnim }],
       backgroundColor: theme?.cardBg || '#ffffff',
@@ -560,7 +575,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         </ScrollView>
       )}
 
-      {/* ✅ behavior: 'height' لـ Android لمنع اختفاء الحقول خلف الكيبورد */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -730,11 +744,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   );
 }
 
-// ✅ تمرير insets كمعامل للـ styles
 const mkStyles = (t, insets) => StyleSheet.create({
   container: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20000 },
-  
-  // ✅ header بدون paddingTop ثابت - يعتمد على insets.top من الـ container
   header: {
     backgroundColor: '#00796b',
     padding: 15,
@@ -774,3 +785,4 @@ const mkStyles = (t, insets) => StyleSheet.create({
   timeText: { fontSize: 9.5, fontWeight: '400' },
   waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 }
 });
+
