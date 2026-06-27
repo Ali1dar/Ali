@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/utils/ThemeContext';
 import { firebaseAuth, db } from './src/utils/firebase';
 
@@ -271,7 +272,7 @@ function AppContent() {
               onToast={showToast}
               province={province}
               onProvinceChange={changeProvince}
-              userId={user?.uid || ''} 
+              userId={user?.uid || ''}
             />
           ) : (
             <PharmacyScreen
@@ -283,7 +284,6 @@ function AppContent() {
             />
           )}
 
-          {/* ✅ نقلنا الشاشات المتراكبة لتفتح فقط عندما يسجل المستخدم دخوله تفادياً للكراش الفوري المجهول */}
           {chatOpen && (
             <ChatScreen
               visible={chatOpen} onClose={() => setChatOpen(false)}
@@ -292,7 +292,7 @@ function AppContent() {
               localRequests={[]} onToast={showToast}
             />
           )}
-          
+
           <SettingsScreen
             visible={settingsOpen} onClose={() => setSettingsOpen(false)}
             onToast={showToast} role={userData?.role} userData={userData}
@@ -334,12 +334,14 @@ function AppContent() {
   );
 }
 
-// التصدير الرئيسي الآمن
+// ✅ SafeAreaProvider مضاف لحل مشكلة الكراش عند فتح الدردشة
 export default function App() {
   return (
-    <ThemeProvider>
-      <AppContent />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AppContent />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 
@@ -384,4 +386,3 @@ const s = StyleSheet.create({
   },
   hBtnTxt: { color: 'white', fontSize: 14, fontWeight: 'bold' },
 });
-
