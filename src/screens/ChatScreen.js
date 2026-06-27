@@ -52,7 +52,6 @@ function AudioPlayer({ uri, isMe, timestamp, seen }) {
         return;
       }
       
-      // ✅ تعديل إعدادات الصوت لتتوافق مع معايير إكسبو الحديثة بدون كراش
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
@@ -300,42 +299,44 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   }, [visible]);
 
   const startListenTabs = (isMounted) => {
-    const ref = db.ref(`chats/${chatId}`);
-    const listener = ref.on('value', async (snap) => {
-      if (!snap.exists() || !isMounted) return;
-      const ids = [];
-      const unreads = {};
-      const names = { ...tabNames };
-      const ps = [];
-      snap.forEach(c => {
-        if (!['unreadPharmacy', 'unreadPatient'].includes(c.key)) {
-          const pid = c.key;
-          ids.push(pid);
-          unreads[pid] = c.val()?.unreadPatient || 0;
-          if (!names[pid]) {
-            ps.push(
-              db.ref(`users/${pid}`).once('value').then(s => {
-                names[pid] = s.val()?.pharmacyName || `صيدلية(${pid.slice(0, 5)})`;
-              }).catch(() => {})
-            );
+    try {
+      const ref = db.ref(`chats/${chatId}`);
+      const listener = ref.on('value', async (snap) => {
+        if (!snap.exists() || !isMounted) return;
+        const ids = [];
+        const unreads = {};
+        const names = { ...tabNames };
+        const ps = [];
+        snap.forEach(c => {
+          if (!['unreadPharmacy', 'unreadPatient'].includes(c.key)) {
+            const pid = c.key;
+            ids.push(pid);
+            unreads[pid] = c.val()?.unreadPatient || 0;
+            if (!names[pid]) {
+              ps.push(
+                db.ref(`users/${pid}`).once('value').then(s => {
+                  names[pid] = s.val()?.pharmacyName || `صيدلية(${pid.slice(0, 5)})`;
+                }).catch(() => {})
+              );
+            }
+          }
+        });
+        if (ps.length > 0) await Promise.all(ps).catch(() => {});
+        if (!isMounted) return;
+        setTabs(ids);
+        setTabNames(names);
+        setTabUnreads(unreads);
+        if (!activeTab) {
+          const targetPid = pharmacyId && ids.includes(pharmacyId) ? pharmacyId : ids[0];
+          if (targetPid) {
+            setActiveTab(targetPid);
+            db.ref(`chats/${chatId}/${targetPid}/unreadPatient`).set(0).catch(() => {});
+            startListen(chatId, targetPid);
           }
         }
       });
-      if (ps.length > 0) await Promise.all(ps).catch(() => {});
-      if (!isMounted) return;
-      setTabs(ids);
-      setTabNames(names);
-      setTabUnreads(unreads);
-      if (!activeTab) {
-        const targetPid = pharmacyId && ids.includes(pharmacyId) ? pharmacyId : ids[0];
-        if (targetPid) {
-          setActiveTab(targetPid);
-          db.ref(`chats/${chatId}/${targetPid}/unreadPatient`).set(0).catch(() => {});
-          startListen(chatId, targetPid);
-        }
-      }
-    });
-    tabsListenerRef.current = () => ref.off('value', listener);
+      tabsListenerRef.current = () => ref.off('value', listener);
+    } catch(e) { console.log(e); }
   };
 
   const selectTab = (pid) => {
@@ -345,44 +346,48 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   };
 
   const startListen = (cId, pid) => {
-    if (msgRef.current) msgRef.current();
-    if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0).catch(() => {});
-    else db.ref(`chats/${cId}/${pid}/unreadPatient`).set(0).catch(() => {});
-    const ref = db.ref(`chats/${cId}/${pid}/messages`).limitToLast(40);
-    const listener = ref.on('value', snap => {
-      const arr = [];
-      if (snap.exists()) {
-        snap.forEach(c => {
-          const msgData = c.val();
-          if (msgData.role !== role && !msgData.seen) {
-            db.ref(`chats/${cId}/${pid}/messages/${c.key}/seen`).set(true).catch(() => {});
-          }
-          arr.unshift({ id: c.key, ...msgData });
-        });
+    try {
+      if (msgRef.current) msgRef.current();
+      if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0).catch(() => {});
+      else db.ref(`chats/${cId}/${pid}/unreadPatient`).set(0).catch(() => {});
+      
+      // ✅ تقليل عدد جلب الرسائل الأولي لـ 25 لتسريع استجابة الواجهات المتجاوبة
+      const ref = db.ref(`chats/${cId}/${pid}/messages`).limitToLast(25);
+      const listener = ref.on('value', snap => {
+        const arr = [];
+        if (snap.exists()) {
+          snap.forEach(c => {
+            const msgData = c.val();
+            if (msgData.role !== role && !msgData.seen) {
+              db.ref(`chats/${cId}/${pid}/messages/${c.key}/seen`).set(true).catch(() => {});
+            }
+            arr.unshift({ id: c.key, ...msgData });
+          });
+        }
+        setMessages(arr);
+      });
+      msgRef.current = () => ref.off('value', listener);
+      if (presenceRef.current) presenceRef.current();
+      let target = pid;
+      if (role === 'pharmacy') {
+        target = isDirectChat ? cId.split('_')[1] : (localRequests?.find(r => r.id === cId)?.patientId || pid);
       }
-      setMessages(arr);
-    });
-    msgRef.current = () => ref.off('value', listener);
-    if (presenceRef.current) presenceRef.current();
-    let target = pid;
-    if (role === 'pharmacy') {
-      target = isDirectChat ? cId.split('_')[1] : (localRequests?.find(r => r.id === cId)?.patientId || pid);
-    }
-    const uPresenceRef = db.ref(`users/${target}/presence`);
-    const updateStatusText = (snapData) => {
-      if (snapData?.online === true) {
-        setUserStatus('🟢 متصل الآن');
-      } else {
-        setUserStatus(`🕒 آخر ظهور ${formatTimeAgo(snapData?.lastSeen)}`);
-      }
-    };
-    uPresenceRef.on('value', s => {
-      const d = s.val();
-      updateStatusText(d);
-      clearInterval(statusIntervalRef.current);
-      statusIntervalRef.current = setInterval(() => updateStatusText(d), 10000);
-    });
-    presenceRef.current = () => uPresenceRef.off('value');
+      const uPresenceRef = db.ref(`users/${target}/presence`);
+      const updateStatusText = (snapData) => {
+        if (snapData?.online === true) {
+          setUserStatus('🟢 متصل الآن');
+        } else {
+          setUserStatus(`🕒 آخر ظهور ${formatTimeAgo(snapData?.lastSeen)}`);
+        }
+      };
+      uPresenceRef.on('value', s => {
+        const d = s.val();
+        updateStatusText(d);
+        clearInterval(statusIntervalRef.current);
+        statusIntervalRef.current = setInterval(() => updateStatusText(d), 10000);
+      });
+      presenceRef.current = () => uPresenceRef.off('value');
+    } catch (e) { console.log(e); }
   };
 
   const triggerNotification = async (title, body) => {
@@ -449,7 +454,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const sendImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return onToast('يرجى السماح بالوصول للمعرض', 'error');
-    const r = await ImagePicker.launchImageLibraryAsync({ quality: 0.5, base64: true });
+    // ✅ تقليل الـ quality إلى 0.3 لتفادي تضخم سلاسل الـ Base64 وحماية الذاكرة
+    const r = await ImagePicker.launchImageLibraryAsync({ quality: 0.3, base64: true });
     if (!r.canceled && r.assets[0]) {
       const b64 = `data:image/jpeg;base64,${r.assets[0].base64}`;
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
@@ -460,24 +466,25 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   };
 
   const startRecording = async () => {
-    const { status } = await Audio.requestPermissionsAsync();
-    if (status !== 'granted') return onToast('يرجى السماح باستخدام الميكروفون', 'error');
-    
-    // ✅ تعديل إعدادات التسجيل لتتناسب مع متطلبات إكسبو الحديثة بأمان
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldRouteThroughEarpieceIOS: false
-    }).catch(e => console.log(e));
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') return onToast('يرجى السماح باستخدام الميكروفون', 'error');
+      
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldRouteThroughEarpieceIOS: false
+      }).catch(e => console.log(e));
 
-    const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY).catch(() => ({}));
-    if (rec && rec.getURI) {
-      setRecording(rec);
-      setIsRecording(true);
-      setRecSeconds(0);
-      recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
-    }
+      const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY).catch(() => ({}));
+      if (rec && rec.getURI) {
+        setRecording(rec);
+        setIsRecording(true);
+        setRecSeconds(0);
+        recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
+      }
+    } catch(e) { console.log(e); }
   };
 
   const stopRecordingAndSend = async (doSend = true) => {
@@ -587,6 +594,11 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           style={[st.msgList, { backgroundColor: theme?.chatBg || '#efeae2' }]}
           contentContainerStyle={{ padding: 14, paddingBottom: 20 }}
           inverted
+          // ✅ خصائص تأمين الذاكرة وحفظ استقرار الواجهة للتجاوب مع كل مقاسات الشاشات دون كراش
+          removeClippedSubviews={Platform.OS === 'android'}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           renderItem={({ item }) => {
             const isMe = item.role === role;
             const defaultBg = isMe ? (theme?.primary || '#00796b') : '#dcf8c6';
