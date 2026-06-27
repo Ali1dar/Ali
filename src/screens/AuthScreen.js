@@ -2,16 +2,16 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
-  ImageBackground, Dimensions, Linking, // ✅ تم إضافة Linking لفتح الواتساب
+  KeyboardAvoidingView, Platform, ActivityIndicator,
+  ScrollView, Dimensions, Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { firebaseAuth, db, PROVINCES, arabicError } from '../utils/firebase';
+import { firebaseAuth, db, arabicError } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 import ProvincePicker from '../components/ProvincePicker';
-import messaging from '@react-native-firebase/messaging'; 
+import messaging from '@react-native-firebase/messaging';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 const saveFcmToken = async (uid) => {
   try {
@@ -23,7 +23,6 @@ const saveFcmToken = async (uid) => {
     const token = await messaging().getToken();
     if (token) {
       await db.ref(`users/${uid}/fcmToken`).set(token);
-      console.log('✅ تم حفظ fcmToken:', token);
     }
   } catch (e) {
     console.log('❌ خطأ في حفظ التوكن:', e);
@@ -44,23 +43,17 @@ export default function AuthScreen({ onToast }) {
   const [otpSent, setOtpSent] = useState(false);
   const confirmRef = useRef(null);
 
-  // ✅ دالة التعامل مع تحويل الصيدلية إلى الواتساب الجديد الخاص بك للتفعيل والدخول
   const handlePharmacyWhatsApp = () => {
-    const phoneNumber = '9647823017544'; // ⚠️ تم تحديث الرقم وتثبيته بصيغته الدولية السليمة هنا
+    const phoneNumber = '9647823017544';
     const message = 'مرحباً، أود تسجيل صيدليتي وتفعيل الحساب في تطبيق دليلك الدوائي.';
     const url = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
-
     Linking.canOpenURL(url)
       .then((supported) => {
-        if (supported) {
-          return Linking.openURL(url);
-        } else {
-          // حل احتياطي في حال فتح من متصفح خارجي أو نظام لا يدعم البروتوكول المباشر
-          const webUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
-          return Linking.openURL(webUrl);
-        }
+        if (supported) return Linking.openURL(url);
+        const webUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
+        return Linking.openURL(webUrl);
       })
-      .catch(() => onToast('يرجى التأكد من تثبيت تطبيق واتساب على جهازك', 'error'));
+      .catch(() => onToast('يرجى التأكد من تثبيت تطبيق واتساب', 'error'));
   };
 
   const handleEmail = async () => {
@@ -69,7 +62,7 @@ export default function AuthScreen({ onToast }) {
     try {
       if (isLogin) {
         const cred = await firebaseAuth.signInWithEmailAndPassword(email.trim(), password.trim());
-        await saveFcmToken(cred.user.uid); 
+        await saveFcmToken(cred.user.uid);
       } else {
         if (!fullName.trim()) { setLoading(false); return onToast('يرجى كتابة الاسم الكامل', 'error'); }
         const cred = await firebaseAuth.createUserWithEmailAndPassword(email.trim(), password.trim());
@@ -77,7 +70,7 @@ export default function AuthScreen({ onToast }) {
           role: 'patient', patientName: fullName.trim(), email: email.trim(),
           province, subscriptionExpiry: Date.now() + 30 * 86400000,
         });
-        await saveFcmToken(cred.user.uid); 
+        await saveFcmToken(cred.user.uid);
       }
     } catch (e) { onToast(arabicError(e.code), 'error'); }
     finally { setLoading(false); }
@@ -109,7 +102,7 @@ export default function AuthScreen({ onToast }) {
           subscriptionExpiry: Date.now() + 30 * 86400000,
         });
       }
-      await saveFcmToken(r.user.uid); 
+      await saveFcmToken(r.user.uid);
       onToast('تم الدخول بنجاح!');
     } catch { onToast('رمز خاطئ أو منتهي الصلاحية', 'error'); }
     finally { setLoading(false); }
@@ -118,35 +111,46 @@ export default function AuthScreen({ onToast }) {
   const s = styles(theme);
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ImageBackground
-        source={require('../../assets/splash.png')}
-        style={s.heroBg}
-        resizeMode="cover"
-      >
-        <LinearGradient
-          colors={['rgba(0,77,64,0.55)', 'rgba(0,121,107,0.85)', 'rgba(0,77,64,0.97)']}
-          style={s.heroGradient}
-        >
-          <TouchableOpacity style={s.themeBtn} onPress={toggle}>
-            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{isDark ? '☀️' : '🌙'}</Text>
-          </TouchableOpacity>
-          <View style={s.heroContent} />
-        </LinearGradient>
-      </ImageBackground>
-
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: theme.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'android' ? 0 : 0}
+    >
       <ScrollView
-        style={[s.formArea, { backgroundColor: theme.bg }]}
-        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
+        {/* Header */}
+        <View style={s.header}>
+          <LinearGradient
+            colors={[theme.primary, '#00796b']}
+            style={s.headerGradient}
+          >
+            <Text style={s.appName}>دليلك الدوائي</Text>
+            <Text style={s.appSub}>دليلك الشامل للأدوية والمعلومات الطبية</Text>
+          </LinearGradient>
+          <TouchableOpacity style={s.themeBtn} onPress={toggle}>
+            <Text style={{ fontSize: 20 }}>{isDark ? '☀️' : '🌙'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Card */}
         <View style={[s.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-          <Text style={[s.title, { color: theme.primary }]}>{isLogin ? 'تسجيل الدخول' : 'حساب جديد'}</Text>
-          <Text style={[s.sub, { color: theme.subText }]}>{isLogin ? 'مرحباً، سجّل دخولك للمتابعة' : 'أنشئ حسابك الآن'}</Text>
+          <Text style={[s.title, { color: theme.primary }]}>
+            {isLogin ? 'تسجيل الدخول' : 'حساب جديد'}
+          </Text>
+          <Text style={[s.sub, { color: theme.subText }]}>
+            {isLogin ? 'مرحباً، سجّل دخولك للمتابعة' : 'أنشئ حسابك الآن'}
+          </Text>
 
           <View style={s.tabs}>
             {['email', 'phone'].map(m => (
-              <TouchableOpacity key={m} style={[s.tab, { borderColor: theme.border, backgroundColor: method === m ? theme.primary : theme.bg }]} onPress={() => setMethod(m)}>
+              <TouchableOpacity
+                key={m}
+                style={[s.tab, { borderColor: theme.border, backgroundColor: method === m ? theme.primary : theme.bg }]}
+                onPress={() => setMethod(m)}
+              >
                 <Text style={{ color: method === m ? 'white' : theme.text, fontWeight: 'bold', fontSize: 13 }}>
                   {m === 'email' ? '📧 البريد الإلكتروني' : '📱 رقم الهاتف'}
                 </Text>
@@ -159,27 +163,58 @@ export default function AuthScreen({ onToast }) {
           {method === 'email' && (
             <>
               {!isLogin && (
-                <TextInput style={[s.input, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }]}
-                  placeholder="الاسم الكامل" placeholderTextColor={theme.subText}
-                  value={fullName} onChangeText={setFullName} textAlign="right" />
+                <TextInput
+                  style={[s.input, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }]}
+                  placeholder="الاسم الكامل"
+                  placeholderTextColor={theme.subText}
+                  value={fullName}
+                  onChangeText={setFullName}
+                  textAlign="right"
+                />
               )}
-              <TextInput style={[s.input, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }]}
-                placeholder="البريد الإلكتروني" placeholderTextColor={theme.subText}
-                value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" textAlign="right" />
-              <TextInput style={[s.input, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }]}
-                placeholder="كلمة المرور" placeholderTextColor={theme.subText}
-                value={password} onChangeText={setPassword} secureTextEntry textAlign="right" />
+              <TextInput
+                style={[s.input, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }]}
+                placeholder="البريد الإلكتروني"
+                placeholderTextColor={theme.subText}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                textAlign="right"
+              />
+              <TextInput
+                style={[s.input, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }]}
+                placeholder="كلمة المرور"
+                placeholderTextColor={theme.subText}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                textAlign="right"
+              />
             </>
           )}
 
           {method === 'phone' && (
             !otpSent
-              ? <TextInput style={[s.input, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }]}
-                  placeholder="+9647700000000" placeholderTextColor={theme.subText}
-                  value={phone} onChangeText={setPhone} keyboardType="phone-pad" textAlign="right" />
-              : <TextInput style={[s.input, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }]}
-                  placeholder="رمز التحقق (6 أرقام)" placeholderTextColor={theme.subText}
-                  value={otp} onChangeText={setOtp} keyboardType="numeric" maxLength={6} textAlign="right" />
+              ? <TextInput
+                  style={[s.input, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }]}
+                  placeholder="+9647700000000"
+                  placeholderTextColor={theme.subText}
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  textAlign="right"
+                />
+              : <TextInput
+                  style={[s.input, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }]}
+                  placeholder="رمز التحقق (6 أرقام)"
+                  placeholderTextColor={theme.subText}
+                  value={otp}
+                  onChangeText={setOtp}
+                  keyboardType="numeric"
+                  maxLength={6}
+                  textAlign="right"
+                />
           )}
 
           <TouchableOpacity
@@ -203,11 +238,10 @@ export default function AuthScreen({ onToast }) {
             </Text>
           </TouchableOpacity>
 
-          {/* ─── 🟢 زر تسجيل الدخول المضاف للصيدليات ─── */}
           <View style={{ width: '100%', height: 1, backgroundColor: theme.border, marginVertical: 18 }} />
-          
-          <TouchableOpacity 
-            style={[s.pharmacyBtn, { borderColor: theme.primary }]} 
+
+          <TouchableOpacity
+            style={[s.pharmacyBtn, { borderColor: theme.primary }]}
             onPress={handlePharmacyWhatsApp}
           >
             <Text style={[s.pharmacyBtnTxt, { color: theme.primary }]}>
@@ -221,12 +255,42 @@ export default function AuthScreen({ onToast }) {
 }
 
 const styles = (theme) => StyleSheet.create({
-  heroBg: { width: width, height: height * 0.35 },
-  heroGradient: { flex: 1, paddingTop: Platform.OS === 'android' ? 40 : 55, paddingHorizontal: 20 },
-  themeBtn: { alignSelf: 'flex-end', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-  heroContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  formArea: { flex: 1 },
-  card: { padding: 22, borderRadius: 16, borderWidth: 1, elevation: 4 },
+  header: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 20,
+    position: 'relative',
+  },
+  headerGradient: {
+    padding: 30,
+    alignItems: 'center',
+  },
+  appName: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 6,
+  },
+  appSub: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center',
+  },
+  themeBtn: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  card: {
+    padding: 22,
+    borderRadius: 16,
+    borderWidth: 1,
+    elevation: 4,
+  },
   title: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 4 },
   sub: { fontSize: 13, textAlign: 'center', marginBottom: 18 },
   tabs: { flexDirection: 'row', gap: 10, marginBottom: 18 },
@@ -234,7 +298,6 @@ const styles = (theme) => StyleSheet.create({
   input: { padding: 13, borderWidth: 2, borderRadius: 8, fontSize: 15, marginBottom: 13 },
   btn: { padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 4, marginBottom: 10 },
   btnTxt: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-  
   pharmacyBtn: {
     paddingVertical: 13,
     paddingHorizontal: 15,
