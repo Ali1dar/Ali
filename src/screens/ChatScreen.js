@@ -668,6 +668,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           </View>
         )}
 
+        {/* ✅ paddingBottom لمنع اختفاء شريط الكتابة خلف شريط التنقل */}
         <View style={[st.inputArea, { backgroundColor: theme?.cardBg || '#fff', borderTopColor: theme?.border || '#ccc' }]}>
           {!isEditingMode && (
             <TouchableOpacity onPress={sendImage} style={st.iconBtn}>
@@ -723,13 +724,20 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 }
 
 const mkStyles = (t) => StyleSheet.create({
-  container: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20000 },
+  container: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 20000,
+  },
   header: {
     backgroundColor: '#00796b',
     padding: 15,
     paddingTop: Platform.OS === 'android' ? 40 : 55,
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   headerTitle: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   statusTxt: { color: '#b2dfdb', fontSize: 11, marginTop: 2, fontWeight: '500' },
@@ -749,7 +757,16 @@ const mkStyles = (t) => StyleSheet.create({
   editIndicatorBar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingVertical: 6, borderTopWidth: 1, alignItems: 'center' },
   editIndicatorLabel: { fontSize: 11, fontStyle: 'italic' },
   cancelEditTxt: { color: '#f44336', fontSize: 12, fontWeight: 'bold' },
-  inputArea: { flexDirection: 'row', padding: 10, gap: 7, borderTopWidth: 1, alignItems: 'center' },
+
+  // ✅ paddingBottom يمنع اختفاء شريط الكتابة خلف شريط التنقل
+  inputArea: {
+    flexDirection: 'row',
+    padding: 10,
+    paddingBottom: Platform.OS === 'android' ? 25 : 10,
+    gap: 7,
+    borderTopWidth: 1,
+    alignItems: 'center',
+  },
   iconBtn: { padding: 5 },
   iconBtnRecording: { backgroundColor: 'rgba(244,67,54,0.15)', borderRadius: 20, padding: 8 },
   chatInput: { flex: 1, padding: 10, borderWidth: 1, borderRadius: 20, fontSize: 14 },
@@ -761,15 +778,16 @@ const mkStyles = (t) => StyleSheet.create({
     right: 25,
     zIndex: 10,
     backgroundColor: 'rgba(255,255,255,0.25)',
-    width: 45, height: 45,
+    width: 45,
+    height: 45,
     borderRadius: 22.5,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   closeImgTxt: { color: 'white', fontSize: 32, fontWeight: '300', marginTop: -4 },
   fullImage: { width: '100%', height: '80%' },
   metaContainer: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginTop: 3, gap: 3, alignSelf: 'flex-start' },
   mediaMetaFix: { position: 'absolute', bottom: 5, left: 8, backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 5, borderRadius: 8, marginTop: 0 },
   timeText: { fontSize: 9.5, fontWeight: '400' },
-  waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 }
+  waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 },
 });
