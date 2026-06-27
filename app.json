@@ -3,7 +3,7 @@
     "name": "دليلك الدوائي",
     "slug": "dlylk-aldwaey",
     "scheme": "dalilakedawai",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "splash": {
@@ -18,7 +18,7 @@
       "policy": "appVersion"
     },
     "android": {
-      "versionCode": 10,
+      "versionCode": 11,
       "targetSdkVersion": 35,
       "softwareKeyboardLayoutMode": "resize",
       "windowSoftInputMode": "adjustResize",
