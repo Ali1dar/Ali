@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Platform, Alert, BackHandler
+  Platform, Alert, BackHandler, ImageBackground
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
@@ -11,7 +11,6 @@ import { firebaseAuth, db } from './src/utils/firebase';
 import {
   registerForPushNotifications,
   setupNotificationListeners,
-  sendPushNotification
 } from './notifications';
 
 import AuthScreen from './src/screens/AuthScreen';
@@ -87,7 +86,6 @@ function AppContent() {
     const FORTY_EIGHT_HOURS = 172800000;
     const expirationLimit = Date.now() - FORTY_EIGHT_HOURS;
     const requestsRef = db.ref('requests');
-    
     requestsRef.once('value').then(snapshot => {
       if (snapshot.exists()) {
         snapshot.forEach(provinceSnapshot => {
@@ -101,13 +99,12 @@ function AppContent() {
               if (hasExpired || isLegacyWithoutDate) {
                 db.ref(`requests/${provKey}/${reqId}`).remove();
                 db.ref(`chats/${reqId}`).remove();
-                console.log(`[تنظيف تلقائي] تم حذف الطلب والمحادثة للمعرف: ${reqId}`);
               }
             }
           });
         });
       }
-    }).catch(err => console.log("خطأ أثناء التنظيف التلقائي للطلبات:", err));
+    }).catch(err => console.log("خطأ أثناء التنظيف:", err));
   }, [user]);
 
   useEffect(() => {
@@ -157,11 +154,9 @@ function AppContent() {
     else setSubBlock({ show: false, msg: '' });
   };
 
-  // 🔥 تم الإصلاح التام: استدعاء التوجيه بالصيدلية المستهدفة المكتشفة ديناميكياً من قائمة الطلبات
   const openChat = (id, name, pid = null) => {
     setChatId(id);
     setChatName(name);
-    // إذا أرسل المريض معرف صيدلية لديها رسائل غير مقروءة نستخدمه فوراً، وإلا نعتمد الوضع التلقائي الافتراضي
     setChatPid(pid || (userData?.role === 'pharmacy' ? user?.uid : null));
     setChatOpen(true);
   };
@@ -187,23 +182,26 @@ function AppContent() {
     showToast('تم تسجيل الخروج');
   };
 
+  // ✅ شاشة التحميل المصلحة - الصورة تملأ الشاشة كاملة
   if (!ready) {
     return (
-      <LinearGradient
-        colors={['#00251a', '#00695c']}
-        style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+      <ImageBackground
+        source={require('./assets/splash.png')}
+        style={{ flex: 1, width: '100%', height: '100%' }}
+        resizeMode="cover"
       >
-        <View style={s.loadingCard}>
-          <View style={s.loadingIconCircle}>
-            <Text style={{ fontSize: 40 }}>💊</Text>
+        <LinearGradient
+          colors={['rgba(0,37,26,0.2)', 'rgba(0,105,92,0.6)']}
+          style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <View style={s.loadingCard}>
+            <View style={s.loadingBarBg}>
+              <View style={s.loadingBarFill} />
+            </View>
+            <Text style={s.loadingEn}>جاري التحميل...</Text>
           </View>
-          <Text style={s.loadingTitle}>دليلك الدوائي</Text>
-          <Text style={s.loadingEn}>YOUR DRUG GUIDE</Text>
-          <View style={s.loadingBarBg}>
-            <View style={s.loadingBarFill} />
-          </View>
-        </View>
-      </LinearGradient>
+        </LinearGradient>
+      </ImageBackground>
     );
   }
 
@@ -265,7 +263,6 @@ function AppContent() {
         </View>
       )}
 
-      {/* 🚀 تم التعديل: هنا يستقبل الشات الـ chatPid الذي تم تجهيزه ودفعه تلقائياً */}
       <ChatScreen
         visible={chatOpen} onClose={() => setChatOpen(false)}
         chatId={chatId} pharmacyId={chatPid}
@@ -280,7 +277,6 @@ function AppContent() {
         visible={nearbyOpen} onClose={() => setNearbyOpen(false)}
         province={province} onDirectChat={openDirectChat}
       />
-      
       <InboxScreen
         visible={inboxOpen}
         onClose={() => setInboxOpen(false)}
@@ -293,7 +289,6 @@ function AppContent() {
           setChatOpen(true);
         }}
       />
-      
       <InboxScreen
         visible={patientInboxOpen}
         onClose={() => setPatientInboxOpen(false)}
@@ -323,44 +318,26 @@ export default function App() {
 const s = StyleSheet.create({
   root: { flex: 1 },
   loadingCard: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    paddingVertical: 40,
-    paddingHorizontal: 50,
     alignItems: 'center',
     gap: 16,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-  },
-  loadingIconCircle: {
-    width: 80, height: 80,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 40,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  loadingTitle: {
-    fontSize: 30, fontWeight: '800',
-    color: 'white', letterSpacing: 1,
-  },
-  loadingEn: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 12, letterSpacing: 3,
+    paddingHorizontal: 40,
   },
   loadingBarBg: {
-    width: 200, height: 4,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 2, marginTop: 8,
+    width: 200, height: 5,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 3,
     overflow: 'hidden',
   },
   loadingBarFill: {
-    width: '60%', height: '100%',
+    width: '65%', height: '100%',
     backgroundColor: '#00bfa5',
-    borderRadius: 2,
+    borderRadius: 3,
+  },
+  loadingEn: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 14,
+    letterSpacing: 1,
+    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',
