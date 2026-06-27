@@ -62,7 +62,8 @@
         }
       ],
       "expo-updates",
-      "expo-font"
+      "expo-font",
+      "expo-asset"
     ],
     "extra": {
       "eas": {
@@ -72,4 +73,3 @@
     "owner": "alidli"
   }
 }
-
