@@ -53,9 +53,13 @@ function AppContent() {
 
   useEffect(() => {
     if (!user) return;
-    registerForPushNotifications(user.uid);
-    const unsubscribe = setupNotificationListeners();
-    return () => unsubscribe();
+    try {
+      registerForPushNotifications(user.uid);
+      const unsubscribe = setupNotificationListeners();
+      return () => unsubscribe && unsubscribe();
+    } catch (e) {
+      console.log("Notification init error:", e);
+    }
   }, [user]);
 
   useEffect(() => {
@@ -107,7 +111,6 @@ function AppContent() {
     }).catch(err => console.log("خطأ أثناء التنظيف:", err));
   }, [user]);
 
-  // 1️⃣ مراقبة حالة تسجيل الدخول فقط (إصلاح رئيسي)
   useEffect(() => {
     const unsubscribe = firebaseAuth.onAuthStateChanged(u => {
       if (u) {
@@ -122,12 +125,9 @@ function AppContent() {
     return () => unsubscribe();
   }, []);
 
-  // 2️⃣ جلب ومراقبة بيانات المستخدم بشكل منفصل وآمن مع التنظيف (إصلاح رئيسي)
   useEffect(() => {
     if (!user) return;
-
     const userRef = db.ref(`users/${user.uid}`);
-    
     const handleData = (snap) => {
       try {
         const d = snap.val();
@@ -140,7 +140,6 @@ function AppContent() {
           } else {
             setSubBlock({ show: false, msg: '' });
           }
-          // تحديث حالة التواجد بأمان
           db.ref(`users/${user.uid}/presence`).update({ online: true, lastSeen: 'online' }).catch(e => console.log(e));
         }
       } catch (error) {
@@ -149,10 +148,7 @@ function AppContent() {
         setReady(true);
       }
     };
-
     userRef.on('value', handleData);
-
-    // دالة التنظيف لإلغاء المراقبة فوراً عند خروج المستخدم أو تغيير حالته
     return () => userRef.off('value', handleData);
   }, [user]);
 
@@ -275,7 +271,6 @@ function AppContent() {
               onToast={showToast}
               province={province}
               onProvinceChange={changeProvince}
-          // تم إضافة فحص أمان هنا لضمان عدم تمرير حقول فارغة أثناء التحميل الأول
               userId={user?.uid || ''} 
             />
           ) : (
@@ -287,53 +282,59 @@ function AppContent() {
               userId={user?.uid || ''}
             />
           )}
+
+          {/* ✅ نقلنا الشاشات المتراكبة لتفتح فقط عندما يسجل المستخدم دخوله تفادياً للكراش الفوري المجهول */}
+          {chatOpen && (
+            <ChatScreen
+              visible={chatOpen} onClose={() => setChatOpen(false)}
+              chatId={chatId} pharmacyId={chatPid}
+              role={userData?.role || 'patient'} requestName={chatName}
+              localRequests={[]} onToast={showToast}
+            />
+          )}
+          
+          <SettingsScreen
+            visible={settingsOpen} onClose={() => setSettingsOpen(false)}
+            onToast={showToast} role={userData?.role} userData={userData}
+          />
+          <NearbyScreen
+            visible={nearbyOpen} onClose={() => setNearbyOpen(false)}
+            province={province} onDirectChat={openDirectChat}
+          />
+          <InboxScreen
+            visible={inboxOpen}
+            onClose={() => setInboxOpen(false)}
+            role="pharmacy"
+            onOpenChat={(cid) => {
+              setInboxOpen(false);
+              setChatId(cid);
+              setChatName('محادثة واردة');
+              setChatPid(user?.uid);
+              setChatOpen(true);
+            }}
+          />
+          <InboxScreen
+            visible={patientInboxOpen}
+            onClose={() => setPatientInboxOpen(false)}
+            role="patient"
+            onOpenChat={(cid) => {
+              setPatientInboxOpen(false);
+              setChatId(cid);
+              setChatName('محادثة مع الصيدلية');
+              setChatPid(cid.split('_')[2] || null);
+              setChatOpen(true);
+            }}
+          />
+          <SubscriptionOverlay visible={subBlock.show} message={subBlock.msg} />
         </View>
       )}
 
-      <ChatScreen
-        visible={chatOpen} onClose={() => setChatOpen(false)}
-        chatId={chatId} pharmacyId={chatPid}
-        role={userData?.role || 'patient'} requestName={chatName}
-        localRequests={[]} onToast={showToast}
-      />
-      <SettingsScreen
-        visible={settingsOpen} onClose={() => setSettingsOpen(false)}
-        onToast={showToast} role={userData?.role} userData={userData}
-      />
-      <NearbyScreen
-        visible={nearbyOpen} onClose={() => setNearbyOpen(false)}
-        province={province} onDirectChat={openDirectChat}
-      />
-      <InboxScreen
-        visible={inboxOpen}
-        onClose={() => setInboxOpen(false)}
-        role="pharmacy"
-        onOpenChat={(cid) => {
-          setInboxOpen(false);
-          setChatId(cid);
-          setChatName('محادثة واردة');
-          setChatPid(user?.uid);
-          setChatOpen(true);
-        }}
-      />
-      <InboxScreen
-        visible={patientInboxOpen}
-        onClose={() => setPatientInboxOpen(false)}
-        role="patient"
-        onOpenChat={(cid) => {
-          setPatientInboxOpen(false);
-          setChatId(cid);
-          setChatName('محادثة مع الصيدلية');
-          setChatPid(cid.split('_')[2] || null);
-          setChatOpen(true);
-        }}
-      />
-      <SubscriptionOverlay visible={subBlock.show} message={subBlock.msg} />
       <Toast message={toast.msg} visible={toast.visible} type={toast.type} />
     </View>
   );
 }
 
+// التصدير الرئيسي الآمن
 export default function App() {
   return (
     <ThemeProvider>
@@ -383,3 +384,4 @@ const s = StyleSheet.create({
   },
   hBtnTxt: { color: 'white', fontSize: 14, fontWeight: 'bold' },
 });
+
