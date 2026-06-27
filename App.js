@@ -107,20 +107,11 @@ function AppContent() {
     }).catch(err => console.log("خطأ أثناء التنظيف:", err));
   }, [user]);
 
+  // 1️⃣ مراقبة حالة تسجيل الدخول فقط (إصلاح رئيسي)
   useEffect(() => {
-    return firebaseAuth.onAuthStateChanged(u => {
+    const unsubscribe = firebaseAuth.onAuthStateChanged(u => {
       if (u) {
         setUser(u);
-        db.ref(`users/${u.uid}`).on('value', snap => {
-          const d = snap.val();
-          setUserData(d);
-          const prov = d?.province || 'بغداد';
-          setProvince(prov);
-          if (d?.role === 'pharmacy') checkSub(d.subscriptionExpiry);
-          else setSubBlock({ show: false, msg: '' });
-          setReady(true);
-          db.ref(`users/${u.uid}/presence`).update({ online: true, lastSeen: 'online' });
-        });
       } else {
         setUser(null);
         setUserData(null);
@@ -128,7 +119,42 @@ function AppContent() {
         setReady(true);
       }
     });
+    return () => unsubscribe();
   }, []);
+
+  // 2️⃣ جلب ومراقبة بيانات المستخدم بشكل منفصل وآمن مع التنظيف (إصلاح رئيسي)
+  useEffect(() => {
+    if (!user) return;
+
+    const userRef = db.ref(`users/${user.uid}`);
+    
+    const handleData = (snap) => {
+      try {
+        const d = snap.val();
+        if (d) {
+          setUserData(d);
+          const prov = d.province || 'بغداد';
+          setProvince(prov);
+          if (d.role === 'pharmacy') {
+            checkSub(d.subscriptionExpiry);
+          } else {
+            setSubBlock({ show: false, msg: '' });
+          }
+          // تحديث حالة التواجد بأمان
+          db.ref(`users/${user.uid}/presence`).update({ online: true, lastSeen: 'online' }).catch(e => console.log(e));
+        }
+      } catch (error) {
+        console.error("خطأ في معالجة بيانات المستخدم:", error);
+      } finally {
+        setReady(true);
+      }
+    };
+
+    userRef.on('value', handleData);
+
+    // دالة التنظيف لإلغاء المراقبة فوراً عند خروج المستخدم أو تغيير حالته
+    return () => userRef.off('value', handleData);
+  }, [user]);
 
   useEffect(() => {
     if (!user || userData?.role !== 'pharmacy') return;
@@ -182,7 +208,6 @@ function AppContent() {
     showToast('تم تسجيل الخروج');
   };
 
-  // ✅ شاشة التحميل المصلحة - الصورة تملأ الشاشة كاملة
   if (!ready) {
     return (
       <ImageBackground
@@ -250,6 +275,8 @@ function AppContent() {
               onToast={showToast}
               province={province}
               onProvinceChange={changeProvince}
+          // تم إضافة فحص أمان هنا لضمان عدم تمرير حقول فارغة أثناء التحميل الأول
+              userId={user?.uid || ''} 
             />
           ) : (
             <PharmacyScreen
@@ -257,7 +284,7 @@ function AppContent() {
               onToast={showToast}
               province={province}
               pharmacyName={userData?.pharmacyName || 'الصيدلية'}
-              userId={user.uid}
+              userId={user?.uid || ''}
             />
           )}
         </View>
