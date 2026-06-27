@@ -127,11 +127,11 @@ function AudioPlayer({ uri, isMe, timestamp, seen }) {
         </Text>
         {timestamp && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-            <Text style={[ap.waTimeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
+            <Text style={[st.timeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
               {formatMsgTime(timestamp)}
             </Text>
             {isMe && (
-              <Text style={[ap.waChecks, { color: seen ? '#4fc3f7' : 'rgba(255,255,255,0.5)' }]}>
+              <Text style={[st.waChecks, { color: seen ? '#4fc3f7' : 'rgba(255,255,255,0.5)' }]}>
                 {seen ? '✓✓' : '✓'}
               </Text>
             )}
@@ -151,9 +151,7 @@ const ap = StyleSheet.create({
   waSliderDot: { width: 10, height: 10, borderRadius: 5, position: 'absolute', top: '50%', marginTop: -5, marginLeft: -5 },
   waRateBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 4 },
   waFooterRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, paddingHorizontal: 4 },
-  waDurationTxt: { fontSize: 11, fontWeight: '400' },
-  waTimeText: { fontSize: 10 },
-  waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 }
+  waDurationTxt: { fontSize: 11, fontWeight: '400' }
 });
 
 function RecordingIndicator({ seconds }) {
@@ -351,8 +349,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0).catch(() => {});
       else db.ref(`chats/${cId}/${pid}/unreadPatient`).set(0).catch(() => {});
       
-      // ✅ تقليل عدد جلب الرسائل الأولي لـ 25 لتسريع استجابة الواجهات المتجاوبة
-      const ref = db.ref(`chats/${cId}/${pid}/messages`).limitToLast(25);
+      const ref = db.ref(`chats/${cId}/${pid}/messages`).limitToLast(20);
       const listener = ref.on('value', snap => {
         const arr = [];
         if (snap.exists()) {
@@ -454,8 +451,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const sendImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return onToast('يرجى السماح بالوصول للمعرض', 'error');
-    // ✅ تقليل الـ quality إلى 0.3 لتفادي تضخم سلاسل الـ Base64 وحماية الذاكرة
-    const r = await ImagePicker.launchImageLibraryAsync({ quality: 0.3, base64: true });
+    const r = await ImagePicker.launchImageLibraryAsync({ quality: 0.2, base64: true });
     if (!r.canceled && r.assets[0]) {
       const b64 = `data:image/jpeg;base64,${r.assets[0].base64}`;
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
@@ -584,8 +580,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={insets.top}
+        behavior={Platform.OS === 'ios' ? 'padding' : null} // ✅ الأندرويد يعمل بامتياز بدون behavior عند استخدام الحواف الآمنة
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <FlatList
           ref={listRef}
@@ -594,11 +590,10 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           style={[st.msgList, { backgroundColor: theme?.chatBg || '#efeae2' }]}
           contentContainerStyle={{ padding: 14, paddingBottom: 20 }}
           inverted
-          // ✅ خصائص تأمين الذاكرة وحفظ استقرار الواجهة للتجاوب مع كل مقاسات الشاشات دون كراش
           removeClippedSubviews={Platform.OS === 'android'}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={5}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={3}
           renderItem={({ item }) => {
             const isMe = item.role === role;
             const defaultBg = isMe ? (theme?.primary || '#00796b') : '#dcf8c6';
@@ -633,7 +628,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                     </View>
                   )}
                   {item.image && (
-                    <View>
+                    // ✅ حاوي الصورة بأبعاد ثابتة تماماً لمنع متصفح الـ Layout من الكراش أثناء القياس الديناميكي
+                    <View style={st.imageContainerBox}>
                       <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
                         <Image source={{ uri: item.image }} style={st.msgImg} resizeMode="cover" />
                       </TouchableOpacity>
@@ -775,7 +771,8 @@ const mkStyles = (t, insets) => StyleSheet.create({
   bubble: { maxWidth: '78%', padding: 9, borderRadius: 12 },
   msgTxt: { fontSize: 14, lineHeight: 20, textAlign: 'right', paddingBottom: 2 },
   editedLabel: { fontSize: 10, color: 'rgba(0,0,0,0.4)', fontStyle: 'italic' },
-  msgImg: { width: 210, height: 170, borderRadius: 8, marginTop: 2 },
+  imageContainerBox: { width: 210, height: 170, overflow: 'hidden', borderRadius: 8, marginTop: 2 }, // ✅ حماية أبعاد حاوي الصورة
+  msgImg: { width: 210, height: 170 },
   locBubble: { padding: 8, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 7, marginTop: 2 },
   quickBar: { maxHeight: 50, borderTopWidth: 1, paddingHorizontal: 8 },
   quickBtn: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 15, borderWidth: 1, marginRight: 8, marginVertical: 7 },
@@ -797,4 +794,3 @@ const mkStyles = (t, insets) => StyleSheet.create({
   timeText: { fontSize: 9.5, fontWeight: '400' },
   waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 }
 });
-
