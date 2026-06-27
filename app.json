@@ -1,4 +1,4 @@
-{
+Enter{
   "expo": {
     "name": "دليلك الدوائي",
     "slug": "dlylk-aldwaey",
@@ -18,7 +18,7 @@
       "policy": "appVersion"
     },
     "android": {
-      "versionCode": 6,
+      "versionCode": 7,
       "targetSdkVersion": 35,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -41,6 +41,16 @@
       ]
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0"
+          }
+        }
+      ],
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
       [
