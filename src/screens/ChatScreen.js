@@ -4,13 +4,13 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList,
   Image, Animated, Platform, Linking, ScrollView, KeyboardAvoidingView, BackHandler, Modal, Alert
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
 import { db, firebaseAuth } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 
-// 🕒 تحويل الـ timestamp إلى وقت (ساعة:دقيقة م/ص) بشكل آمن
 const formatMsgTime = (ts) => {
   if (!ts) return '';
   try {
@@ -103,26 +103,21 @@ function AudioPlayer({ uri, isMe, timestamp, seen }) {
             {playing ? '⏸' : '▶️'}
           </Text>
         </TouchableOpacity>
-
         <View style={{ flex: 1, justifyContent: 'center', position: 'relative', marginHorizontal: 5 }}>
           <View style={[ap.waBar, { backgroundColor: isMe ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)' }]}>
             <View style={[ap.waFill, { width: `${progress * 100}%`, backgroundColor: isMe ? 'white' : '#00796b' }]} />
           </View>
           <View style={[ap.waSliderDot, { left: `${progress * 100}%`, backgroundColor: isMe ? 'white' : '#00796b' }]} />
         </View>
-
         <TouchableOpacity onPress={toggleRate} style={[ap.waRateBtn, { borderColor: isMe ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.2)' }]}>
           <Text style={{ fontSize: 10, fontWeight: 'bold', color: isMe ? 'white' : '#333' }}>{rate}×</Text>
         </TouchableOpacity>
-
         <Text style={{ fontSize: 18, color: isMe ? 'rgba(255,255,255,0.7)' : '#00796b', marginLeft: 4 }}>🎙️</Text>
       </View>
-
       <View style={ap.waFooterRow}>
         <Text style={[ap.waDurationTxt, { color: isMe ? 'rgba(255,255,255,0.8)' : '#666' }]}>
           {playing ? fmtTime(position) : fmtTime(duration || 0)}
         </Text>
-        
         {timestamp && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
             <Text style={[ap.waTimeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
@@ -166,9 +161,7 @@ function RecordingIndicator({ seconds }) {
     anim.start();
     return () => anim.stop();
   }, []);
-
   const fmtSec = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-
   return (
     <View style={ri.wrap}>
       <Animated.View style={[ri.dot, { transform: [{ scale: pulse }] }]} />
@@ -187,6 +180,10 @@ const ri = StyleSheet.create({
 
 export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role, requestName, localRequests, onToast }) {
   const { theme } = useTheme();
+  
+  // ✅ إضافة insets لقراءة حدود الشاشة الآمنة
+  const insets = useSafeAreaInsets();
+  
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [recording, setRecording] = useState(null);
@@ -195,11 +192,10 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const [userStatus, setUserStatus] = useState('');
   const [tabs, setTabs] = useState([]);
   const [tabNames, setTabNames] = useState({});
-  const [tabUnreads, setTabUnreads] = useState({}); // 🔥 إضافة حالة جديدة لمراقبة الرسائل غير المقروءة لكل تاب صيدلية
+  const [tabUnreads, setTabUnreads] = useState({});
   const [activeTab, setActiveTab] = useState(null);
   const [selectedImg, setSelectedImg] = useState(null);
   const [imgModalVisible, setImgModalVisible] = useState(false);
-
   const [editingMsgId, setEditingMsgId] = useState(null);
   const [isEditingMode, setIsEditingMode] = useState(false);
 
@@ -207,14 +203,14 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const slideAnim = useRef(new Animated.Value(700)).current;
   const msgRef = useRef(null);
   const presenceRef = useRef(null);
-  const tabsListenerRef = useRef(null); // 🔥 مرجع مستمع التابات الحيّة لتفادي التسريبات
+  const tabsListenerRef = useRef(null);
   const recTimerRef = useRef(null);
   const statusIntervalRef = useRef(null);
 
   const myUid = firebaseAuth.currentUser?.uid;
   const isDirectChat = chatId?.startsWith('p_');
   const activePid = role === 'pharmacy' ? myUid : (isDirectChat ? pharmacyId : (activeTab || pharmacyId));
-  const st = mkStyles(theme);
+  const st = mkStyles(theme, insets); // ✅ تمرير insets للـ styles
 
   const formatTimeAgo = (timestamp) => {
     if (!timestamp) return 'غير متصل';
@@ -223,7 +219,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-
     if (seconds < 60) return 'منذ ثوانٍ';
     if (minutes === 1) return 'منذ دقيقة';
     if (minutes === 2) return 'منذ دقيقتين';
@@ -254,9 +249,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   useEffect(() => {
     Animated.timing(slideAnim, { toValue: visible ? 0 : 700, duration: 300, useNativeDriver: true }).start();
-    
     let isMounted = true;
-
     if (msgRef.current) { msgRef.current(); msgRef.current = null; }
     if (presenceRef.current) { presenceRef.current(); presenceRef.current = null; }
     if (tabsListenerRef.current) { tabsListenerRef.current(); tabsListenerRef.current = null; }
@@ -269,18 +262,17 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       setMessages([]);
       setActiveTab(null);
       setUserStatus('جاري التحميل...');
-
       if (role === 'patient' && !isDirectChat) {
-        startListenTabs(isMounted); // 🔥 تحويل جلب التابات إلى مستمع حي فوري وثابت
+        startListenTabs(isMounted);
       } else {
         const currentPid = role === 'pharmacy' ? myUid : pharmacyId;
         setActiveTab(currentPid);
         startListen(chatId, currentPid);
       }
     }
-    return () => { 
+    return () => {
       isMounted = false;
-      if (msgRef.current) msgRef.current(); 
+      if (msgRef.current) msgRef.current();
       if (presenceRef.current) presenceRef.current();
       if (tabsListenerRef.current) tabsListenerRef.current();
       clearInterval(statusIntervalRef.current);
@@ -298,32 +290,22 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   }, [visible, imgModalVisible]);
 
   useEffect(() => {
-    if (!visible && isRecording) {
-      stopRecordingAndSend(false);
-    }
+    if (!visible && isRecording) stopRecordingAndSend(false);
   }, [visible]);
 
-  // 🔥 تم التعديل والجلب الحي: الاستماع المباشر لهيكلية المحادثة وتحديث شارات غير المقروء للتابات لحظياً
   const startListenTabs = (isMounted) => {
     const ref = db.ref(`chats/${chatId}`);
-    
     const listener = ref.on('value', async (snap) => {
       if (!snap.exists() || !isMounted) return;
-      
       const ids = [];
       const unreads = {};
       const names = { ...tabNames };
       const ps = [];
-
       snap.forEach(c => {
         if (!['unreadPharmacy', 'unreadPatient'].includes(c.key)) {
           const pid = c.key;
           ids.push(pid);
-          
-          // قراءة عداد المريض غير المقروء لهذه الصيدلية
           unreads[pid] = c.val()?.unreadPatient || 0;
-          
-          // جلب اسم الصيدلية إن لم يكن مسجلاً مسبقاً في الـ state
           if (!names[pid]) {
             ps.push(
               db.ref(`users/${pid}`).once('value').then(s => {
@@ -333,19 +315,11 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           }
         }
       });
-
-      if (ps.length > 0) {
-        await Promise.all(ps);
-      }
-      
+      if (ps.length > 0) await Promise.all(ps);
       if (!isMounted) return;
-      
       setTabs(ids);
       setTabNames(names);
       setTabUnreads(unreads);
-
-      // إذا كانت التابات محملة لأول مرة ولم يتم تحديد تاب نشط، نفتح التاب الأول المتاح تلقائياً
-      // أو إذا تم تحديد صيدلية قادمة كـ InitialPharmacyId من الواجهة الخارجية
       if (!activeTab) {
         const targetPid = pharmacyId && ids.includes(pharmacyId) ? pharmacyId : ids[0];
         if (targetPid) {
@@ -355,7 +329,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         }
       }
     });
-
     tabsListenerRef.current = () => ref.off('value', listener);
   };
 
@@ -369,9 +342,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     if (msgRef.current) msgRef.current();
     if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0);
     else db.ref(`chats/${cId}/${pid}/unreadPatient`).set(0);
-
     const ref = db.ref(`chats/${cId}/${pid}/messages`).limitToLast(40);
-
     const listener = ref.on('value', snap => {
       const arr = [];
       if (snap.exists()) {
@@ -385,15 +356,12 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       }
       setMessages(arr);
     });
-
     msgRef.current = () => ref.off('value', listener);
-
     if (presenceRef.current) presenceRef.current();
     let target = pid;
     if (role === 'pharmacy') {
       target = isDirectChat ? cId.split('_')[1] : (localRequests?.find(r => r.id === cId)?.patientId || pid);
     }
-    
     const uPresenceRef = db.ref(`users/${target}/presence`);
     const updateStatusText = (snapData) => {
       if (snapData?.online === true) {
@@ -402,16 +370,12 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         setUserStatus(`🕒 آخر ظهور ${formatTimeAgo(snapData?.lastSeen)}`);
       }
     };
-
     uPresenceRef.on('value', s => {
       const d = s.val();
       updateStatusText(d);
       clearInterval(statusIntervalRef.current);
-      statusIntervalRef.current = setInterval(() => {
-        updateStatusText(d);
-      }, 10000);
+      statusIntervalRef.current = setInterval(() => updateStatusText(d), 10000);
     });
-
     presenceRef.current = () => uPresenceRef.off('value');
   };
 
@@ -438,12 +402,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     const msg = text.trim();
     if (!msg || !chatId || !activePid) return;
     setText('');
-
     if (isEditingMode && editingMsgId) {
-      await db.ref(`chats/${chatId}/${activePid}/messages/${editingMsgId}`).update({
-        text: msg,
-        isEdited: true
-      });
+      await db.ref(`chats/${chatId}/${activePid}/messages/${editingMsgId}`).update({ text: msg, isEdited: true });
       setIsEditingMode(false);
       setEditingMsgId(null);
       onToast('تم تعديل الرسالة');
@@ -459,16 +419,11 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   const handleLongPressMessage = (item) => {
     if (item.role !== role || item.isDeleted) return;
-
     const options = [];
     if (item.text) {
       options.push({
         text: '✏️ تعديل الرسالة',
-        onPress: () => {
-          setText(item.text);
-          setIsEditingMode(true);
-          setEditingMsgId(item.id);
-        }
+        onPress: () => { setText(item.text); setIsEditingMode(true); setEditingMsgId(item.id); }
       });
     }
     options.push({
@@ -476,11 +431,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       style: 'destructive',
       onPress: async () => {
         await db.ref(`chats/${chatId}/${activePid}/messages/${item.id}`).update({
-          text: '🚫 تم حذف هذه الرسالة',
-          image: null,
-          audio: null,
-          locationUrl: null,
-          isDeleted: true
+          text: '🚫 تم حذف هذه الرسالة', image: null, audio: null, locationUrl: null, isDeleted: true
         });
         onToast('تم حذف الرسالة');
       }
@@ -538,18 +489,14 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     if (!chatId || !activePid) return;
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return onToast('يرجى السماح بتحديد الموقع', 'error');
-    
     try {
       const loc = await Location.getCurrentPositionAsync({});
       const url = `https://maps.google.com/?q=${loc.coords.latitude},${loc.coords.longitude}`;
-      
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
       await ref.set({ role, locationUrl: url, timestamp: Date.now(), seen: false });
-      
       onToast('تم إرسال الموقع 📍');
       triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'مريض', '📍 أرسل موقعاً جغرافياً');
     } catch (err) {
-      console.log("خطأ في جلب الموقع الجغرافي:", err);
       onToast('فشل جلب الموقع الجغرافي، يرجى المحاولة لاحقاً', 'error');
     }
   };
@@ -577,7 +524,13 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   if (!visible) return null;
 
   return (
-    <Animated.View style={[st.container, { transform: [{ translateY: slideAnim }], backgroundColor: theme?.cardBg || '#ffffff' }]}>
+    // ✅ إضافة paddingTop و paddingBottom من insets
+    <Animated.View style={[st.container, {
+      transform: [{ translateY: slideAnim }],
+      backgroundColor: theme?.cardBg || '#ffffff',
+      paddingTop: insets.top,
+      paddingBottom: insets.bottom,
+    }]}>
       <View style={st.header}>
         <View style={{ flex: 1 }}>
           <Text style={st.headerTitle} numberOfLines={1}>{requestName || 'المحادثة'}</Text>
@@ -592,23 +545,13 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         <ScrollView horizontal style={[st.tabsBar, { borderBottomColor: theme?.border || '#ccc', backgroundColor: theme?.bg || '#f9f9f9' }]} showsHorizontalScrollIndicator={false}>
           {tabs.map(tid => (
             <TouchableOpacity key={tid}
-              style={[
-                st.tabBtn, 
-                { 
-                  borderColor: tabUnreads[tid] > 0 ? '#e53935' : (theme?.border || '#ccc'), 
-                  backgroundColor: activeTab === tid ? (theme?.primary || '#00796b') : (theme?.cardBg || '#fff'),
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 6
-                }
-              ]}
+              style={[st.tabBtn, {
+                borderColor: tabUnreads[tid] > 0 ? '#e53935' : (theme?.border || '#ccc'),
+                backgroundColor: activeTab === tid ? (theme?.primary || '#00796b') : (theme?.cardBg || '#fff'),
+                flexDirection: 'row', alignItems: 'center', gap: 6
+              }]}
               onPress={() => selectTab(tid)}>
-              
-              {/* 🔥 حقن النقطة الحمراء بجانب اسم الصيدلية فوراً إذا كانت القيمة أكبر من 0 */}
-              {tabUnreads[tid] > 0 && (
-                <View style={st.tabRedDot} />
-              )}
-
+              {tabUnreads[tid] > 0 && <View style={st.tabRedDot} />}
               <Text style={{ color: activeTab === tid ? 'white' : (theme?.text || '#000'), fontWeight: 'bold', fontSize: 12 }}>
                 {tabNames[tid] || tid.slice(0, 8)}
               </Text>
@@ -617,7 +560,12 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         </ScrollView>
       )}
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={80}>
+      {/* ✅ behavior: 'height' لـ Android لمنع اختفاء الحقول خلف الكيبورد */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={insets.top}
+      >
         <FlatList
           ref={listRef}
           data={messages}
@@ -628,28 +576,22 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           renderItem={({ item }) => {
             const isMe = item.role === role;
             const defaultBg = isMe ? (theme?.primary || '#00796b') : '#dcf8c6';
-            
             return (
               <View style={[st.msgWrap, isMe ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
-                <TouchableOpacity 
-                  activeOpacity={0.8} 
+                <TouchableOpacity
+                  activeOpacity={0.8}
                   onLongPress={() => handleLongPressMessage(item)}
-                  style={[
-                    st.bubble, 
-                    { backgroundColor: defaultBg },
+                  style={[st.bubble, { backgroundColor: defaultBg },
                     item.isDeleted && { backgroundColor: theme?.bg || '#f5f5f5', borderWidth: 1, borderColor: theme?.border || '#ccc' }
                   ]}
                 >
                   {item.text && (
                     <View>
-                      <Text style={[
-                        st.msgTxt, 
-                        { color: isMe ? 'white' : '#333' },
+                      <Text style={[st.msgTxt, { color: isMe ? 'white' : '#333' },
                         item.isDeleted && { color: theme?.subText || '#999', fontStyle: 'italic', fontSize: 13 }
                       ]}>
                         {item.text} {item.isEdited && !item.isDeleted && <Text style={st.editedLabel}>(معدلة)</Text>}
                       </Text>
-                      
                       {!item.isDeleted && item.timestamp && (
                         <View style={st.metaContainer}>
                           <Text style={[st.timeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
@@ -664,7 +606,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                       )}
                     </View>
                   )}
-
                   {item.image && (
                     <View>
                       <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
@@ -672,9 +613,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                       </TouchableOpacity>
                       {item.timestamp && (
                         <View style={[st.metaContainer, st.mediaMetaFix]}>
-                          <Text style={[st.timeText, { color: 'white' }]}>
-                            {formatMsgTime(item.timestamp)}
-                          </Text>
+                          <Text style={[st.timeText, { color: 'white' }]}>{formatMsgTime(item.timestamp)}</Text>
                           {isMe && (
                             <Text style={[st.waChecks, { color: item.seen ? '#4fc3f7' : 'rgba(255,255,255,0.7)' }]}>
                               {item.seen ? '✓✓' : '✓'}
@@ -684,9 +623,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                       )}
                     </View>
                   )}
-
                   {item.audio && <AudioPlayer uri={item.audio} isMe={isMe} timestamp={item.timestamp} seen={item.seen} />}
-
                   {item.locationUrl && (
                     <View>
                       <TouchableOpacity onPress={() => Linking.openURL(item.locationUrl)} style={st.locBubble}>
@@ -706,7 +643,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                       )}
                     </View>
                   )}
-
                 </TouchableOpacity>
               </View>
             );
@@ -756,7 +692,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
               <Text style={{ fontSize: 21 }}>{isRecording ? '🔴' : '🎙️'}</Text>
             </TouchableOpacity>
           )}
-
           {isRecording ? (
             <View style={{ flex: 1 }}>
               <RecordingIndicator seconds={recSeconds} />
@@ -764,19 +699,17 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           ) : (
             <TextInput
               style={[st.chatInput, { backgroundColor: theme?.bg || '#f5f5f5', borderColor: theme?.border || '#ccc', color: theme?.text || '#000' }]}
-              placeholder={isEditingMode ? "عدل رسالتك هنا..." : "اكتب رسالتك..."} 
+              placeholder={isEditingMode ? "عدل رسالتك هنا..." : "اكتب رسالتك..."}
               placeholderTextColor={theme?.subText || '#999'}
               value={text} onChangeText={setText} textAlign="right"
               onSubmitEditing={sendMsg}
             />
           )}
-
           {!isRecording && text.trim().length === 0 && role === 'patient' && (
             <TouchableOpacity style={st.iconBtn} onPress={sendLocation}>
               <Text style={{ fontSize: 21 }}>📍</Text>
             </TouchableOpacity>
           )}
-
           {!isRecording && (
             <TouchableOpacity style={[st.sendBtn, { backgroundColor: isEditingMode ? '#00c853' : (theme?.primary || '#00796b') }]} onPress={sendMsg}>
               <Text style={{ color: 'white', fontWeight: 'bold' }}>{isEditingMode ? 'حفظ' : 'إرسال'}</Text>
@@ -790,23 +723,30 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           <TouchableOpacity style={st.closeImgBtn} onPress={() => { setImgModalVisible(false); setSelectedImg(null); }}>
             <Text style={st.closeImgTxt}>×</Text>
           </TouchableOpacity>
-          {selectedImg && (
-            <Image source={{ uri: selectedImg }} style={st.fullImage} resizeMode="contain" />
-          )}
+          {selectedImg && <Image source={{ uri: selectedImg }} style={st.fullImage} resizeMode="contain" />}
         </View>
       </Modal>
     </Animated.View>
   );
 }
 
-const mkStyles = (t) => StyleSheet.create({
+// ✅ تمرير insets كمعامل للـ styles
+const mkStyles = (t, insets) => StyleSheet.create({
   container: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20000 },
-  header: { backgroundColor: '#00796b', padding: 15, paddingTop: Platform.OS === 'android' ? 42 : 58, flexDirection: 'row', alignItems: 'center' },
+  
+  // ✅ header بدون paddingTop ثابت - يعتمد على insets.top من الـ container
+  header: {
+    backgroundColor: '#00796b',
+    padding: 15,
+    paddingTop: 15,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
   headerTitle: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   statusTxt: { color: '#b2dfdb', fontSize: 11, marginTop: 2, fontWeight: '500' },
   tabsBar: { maxHeight: 54, borderBottomWidth: 1, paddingHorizontal: 10 },
   tabBtn: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 20, borderWidth: 1, marginRight: 8, marginVertical: 8 },
-  tabRedDot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#e53935' }, // 🔥 تصميم النقطة التنبيهية الحمراء
+  tabRedDot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#e53935' },
   msgList: { flex: 1 },
   msgWrap: { marginBottom: 8 },
   bubble: { maxWidth: '78%', padding: 9, borderRadius: 12 },
@@ -826,10 +766,9 @@ const mkStyles = (t) => StyleSheet.create({
   chatInput: { flex: 1, padding: 10, borderWidth: 1, borderRadius: 20, fontSize: 14 },
   sendBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20 },
   modalBackground: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
-  closeImgBtn: { position: 'absolute', top: Platform.OS === 'android' ? 40 : 55, right: 25, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.25)', width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center' },
+  closeImgBtn: { position: 'absolute', top: (insets?.top || 0) + 10, right: 25, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.25)', width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center' },
   closeImgTxt: { color: 'white', fontSize: 32, fontWeight: '300', marginTop: -4 },
   fullImage: { width: '100%', height: '80%' },
-  
   metaContainer: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginTop: 3, gap: 3, alignSelf: 'flex-start' },
   mediaMetaFix: { position: 'absolute', bottom: 5, left: 8, backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 5, borderRadius: 8, marginTop: 0 },
   timeText: { fontSize: 9.5, fontWeight: '400' },
