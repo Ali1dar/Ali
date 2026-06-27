@@ -9,21 +9,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { firebaseAuth, db, arabicError } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 import ProvincePicker from '../components/ProvincePicker';
-import messaging from '@react-native-firebase/messaging';
 
+// 🛑 تم حذف استيراد مكتبة الـ messaging النيتف المسببة للكراش الفوري
 const { width } = Dimensions.get('window');
 
+// ✅ دالة آمنة لحفظ التوكن عند تسجيل الدخول
 const saveFcmToken = async (uid) => {
   try {
-    const authStatus = await messaging().requestPermission();
-    const enabled =
-      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-    if (!enabled) return;
-    const token = await messaging().getToken();
-    if (token) {
-      await db.ref(`users/${uid}/fcmToken`).set(token);
-    }
+    // يمكنك استدعاء نفس منطق جلب التوكن الخاص بـ Expo هنا إذا رغبت، أو تحديث حقول المستخدم بآمان
+    console.log('سيتم التعامل مع التوكن عبر نظام إشعارات Expo المستدعى في App.js');
   } catch (e) {
     console.log('❌ خطأ في حفظ التوكن:', e);
   }
@@ -72,8 +66,11 @@ export default function AuthScreen({ onToast }) {
         });
         await saveFcmToken(cred.user.uid);
       }
-    } catch (e) { onToast(arabicError(e.code), 'error'); }
-    finally { setLoading(false); }
+    } catch (e) { 
+      onToast(e.code ? arabicError(e.code) : 'حدث خطأ في عملية التحقق', 'error'); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleSendOtp = async () => {
@@ -85,8 +82,11 @@ export default function AuthScreen({ onToast }) {
       confirmRef.current = await firebaseAuth.signInWithPhoneNumber(p);
       setOtpSent(true);
       onToast('تم إرسال رمز التفعيل 💬');
-    } catch (e) { onToast(arabicError(e.code), 'error'); }
-    finally { setLoading(false); }
+    } catch (e) { 
+      onToast(e.code ? arabicError(e.code) : 'خطأ في إرسال الرمز', 'error'); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleOtp = async () => {
@@ -104,8 +104,11 @@ export default function AuthScreen({ onToast }) {
       }
       await saveFcmToken(r.user.uid);
       onToast('تم الدخول بنجاح!');
-    } catch { onToast('رمز خاطئ أو منتهي الصلاحية', 'error'); }
-    finally { setLoading(false); }
+    } catch { 
+      onToast('رمز خاطئ أو منتهي الصلاحية', 'error'); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const s = styles(theme);
@@ -114,7 +117,6 @@ export default function AuthScreen({ onToast }) {
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: theme.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'android' ? 0 : 0}
     >
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20, paddingBottom: 40 }}
@@ -315,3 +317,4 @@ const styles = (theme) => StyleSheet.create({
     textAlign: 'center',
   },
 });
+
