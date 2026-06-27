@@ -34,8 +34,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const listRef = useRef(null);
   const slideAnim = useRef(new Animated.Value(700)).current;
   
-  // 🔥 حساب حركة الكيبورد فوريًا
-  const keyboardHeight = useRef(new Animated.Value(0)).current;
+  // 🔥 استخدام قيمة منفصلة وآمنة لرفع شريط الإدخال فقط لتجنب كراش الحاوية الأساسية
+  const keyboardPadding = useRef(new Animated.Value(0)).current;
 
   const msgRef = useRef(null);
   const presenceRef = useRef(null);
@@ -45,10 +45,11 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   const myUid = firebaseAuth.currentUser?.uid;
   const isDirectChat = chatId?.startsWith('p_');
+  const activePid = role === 'pharmacy' ? myUid : (isDirectChat ? pharmacyId : (activeTab || pharmacyId));
   
   const st = mkStyles(theme, insets);
 
-  // 🛠️ الاستماع الدقيق لحركات الكيبورد لتقليص الشاشة بأكملها
+  // 🛠️ الاستماع للكيبورد بطريقة آمنة ومجربة تمنع الـ Layout Loop
   useEffect(() => {
     if (!visible) return;
 
@@ -56,19 +57,25 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const showSubscription = Keyboard.addListener(showEvent, (e) => {
-      Animated.timing(keyboardHeight, {
-        toValue: e.endCoordinates.height,
-        duration: Platform.OS === 'ios' ? e.duration : 100, // سرعة إضافية للأندرويد لحل التباطؤ
-        useNativeDriver: false,
-      }).start(() => {
-        listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      // حساب الارتفاع الصافي المطلوب رفعه مع خصم الحواف السفلية لتجنب القفز الزائد
+      const targetHeight = Platform.OS === 'ios' ? e.endCoordinates.height - insets.bottom : e.endCoordinates.height;
+      Animated.parallel([
+        Animated.timing(keyboardPadding, {
+          toValue: targetHeight,
+          duration: Platform.OS === 'ios' ? e.duration : 200,
+          useNativeDriver: false, // تحريك البادينغ السفلي ببطء وأمان
+        })
+      ]).start(() => {
+        setTimeout(() => {
+          listRef.current?.scrollToOffset({ offset: 0, animated: true });
+        }, 50);
       });
     });
 
     const hideSubscription = Keyboard.addListener(hideEvent, (e) => {
-      Animated.timing(keyboardHeight, {
+      Animated.timing(keyboardPadding, {
         toValue: 0,
-        duration: Platform.OS === 'ios' ? e.duration : 100,
+        duration: Platform.OS === 'ios' ? e.duration : 200,
         useNativeDriver: false,
       }).start();
     });
@@ -77,7 +84,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [visible]);
+  }, [visible, insets.bottom]);
 
   useEffect(() => {
     Animated.timing(slideAnim, { toValue: visible ? 0 : 700, duration: 300, useNativeDriver: true }).start();
@@ -113,20 +120,14 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     };
   }, [visible, chatId]);
 
-  // ... (بقية الدوال الداخلية startListenTabs, sendMsg الخ تبقى مستقرة ودون تغيير) ...
+  // ... (دوال startListenTabs، sendMsg، الخ تبقى ثابتة ومستقرة كما هي) ...
 
   if (!visible) return null;
 
   return (
-    /* 🔥 التغيير الجذري هنا: جعل الحاوية المطلقة تنتهي (bottom) عند بداية الكيبورد تماماً */
-    <Animated.View style={[
-      st.container, 
-      { 
-        transform: [{ translateY: slideAnim }], 
-        backgroundColor: theme?.cardBg || '#ffffff',
-        bottom: keyboardHeight // الشاشة بالكامل تتقلص وتصعد مع صعود الكيبورد حتمياً!
-      }
-    ]}>
+    // الحاوية الأساسية عادت مستقرة بـ bottom: 0 ثابت لحماية التطبيق من الانهيار
+    <Animated.View style={[st.container, { transform: [{ translateY: slideAnim }], backgroundColor: theme?.cardBg || '#ffffff' }]}>
+      
       {/* هيدر الشاشة */}
       <View style={st.header}>
         <View style={{ flex: 1 }}>
@@ -216,16 +217,16 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         </View>
       )}
 
-      {/* شريط الإدخال السفلي الثابت (يتأثر فقط بـ safe area عند إغلاق الكيبورد) */}
-      <View style={[
+      {/* 🔥 الحل الحاسم للكراش والحواف معاً: تحريك الـ padding السفلي لهذه الحاوية فقط دون التأثير على هيكل الشاشة المطلق */}
+      <Animated.View style={[
         st.inputArea, 
         { 
           backgroundColor: theme?.cardBg || '#fff', 
           borderTopColor: theme?.border || '#ccc',
-          paddingBottom: keyboardHeight.interpolate({
-            inputRange: [0, 1],
-            outputRange: [Platform.OS === 'ios' ? (insets.bottom > 0 ? insets.bottom : 8) : (insets.bottom > 0 ? insets.bottom + 4 : 10), 10]
-          })
+          paddingBottom: Animated.add(
+            keyboardPadding,
+            Platform.OS === 'ios' ? (insets.bottom > 0 ? insets.bottom : 8) : (insets.bottom > 0 ? insets.bottom + 4 : 10)
+          )
         }
       ]}>
         {!isEditingMode && (
@@ -270,7 +271,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
             <Text style={{ color: 'white', fontWeight: 'bold' }}>{isEditingMode ? 'حفظ' : 'إرسال'}</Text>
           </TouchableOpacity>
         )}
-      </View>
+      </Animated.View>
 
       {/* مودال الصور */}
       <Modal visible={imgModalVisible} transparent animationType="fade">
@@ -286,8 +287,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 }
 
 const mkStyles = (t, insets) => StyleSheet.create({
-  // تم حذف الـ bottom: 0 الثابت وتمريره ديناميكياً بالأعلى تبعاً للكيبورد
-  container: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20000 },
+  // العودة للبنية المستقرة 100% التي تمنع خروج التطبيق
+  container: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20000 },
   header: { 
     backgroundColor: '#00796b', 
     paddingHorizontal: 15, 
