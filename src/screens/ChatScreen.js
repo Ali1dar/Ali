@@ -4,13 +4,14 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList,
   Image, Animated, Platform, Linking, ScrollView, KeyboardAvoidingView, BackHandler, Modal, Alert
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // 🔥 استيراد الحواف الآمنة للأنظمة
 import { db, firebaseAuth } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 
+// 🕒 تحويل الـ timestamp إلى وقت بشكل آمن
 const formatMsgTime = (ts) => {
   if (!ts) return '';
   try {
@@ -51,14 +52,7 @@ function AudioPlayer({ uri, isMe, timestamp, seen }) {
         }
         return;
       }
-      
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldRouteThroughEarpieceIOS: false
-      }).catch(e => console.log(e));
-
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
       const { sound: s, status } = await Audio.Sound.createAsync(
         { uri },
         { shouldPlay: true, rate, shouldCorrectPitch: true }
@@ -127,11 +121,11 @@ function AudioPlayer({ uri, isMe, timestamp, seen }) {
         </Text>
         {timestamp && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-            <Text style={[st.timeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
+            <Text style={[ap.waTimeText, { color: isMe ? 'rgba(255,255,255,0.6)' : '#777' }]}>
               {formatMsgTime(timestamp)}
             </Text>
             {isMe && (
-              <Text style={[st.waChecks, { color: seen ? '#4fc3f7' : 'rgba(255,255,255,0.5)' }]}>
+              <Text style={[ap.waChecks, { color: seen ? '#4fc3f7' : 'rgba(255,255,255,0.5)' }]}>
                 {seen ? '✓✓' : '✓'}
               </Text>
             )}
@@ -151,7 +145,9 @@ const ap = StyleSheet.create({
   waSliderDot: { width: 10, height: 10, borderRadius: 5, position: 'absolute', top: '50%', marginTop: -5, marginLeft: -5 },
   waRateBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 4 },
   waFooterRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, paddingHorizontal: 4 },
-  waDurationTxt: { fontSize: 11, fontWeight: '400' }
+  waDurationTxt: { fontSize: 11, fontWeight: '400' },
+  waTimeText: { fontSize: 10 },
+  waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 }
 });
 
 function RecordingIndicator({ seconds }) {
@@ -185,8 +181,7 @@ const ri = StyleSheet.create({
 
 export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role, requestName, localRequests, onToast }) {
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-  
+  const insets = useSafeAreaInsets(); // 🔥 جلب الحواف الحقيقية للجهاز الحالي ديناميكياً
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [recording, setRecording] = useState(null);
@@ -195,7 +190,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const [userStatus, setUserStatus] = useState('');
   const [tabs, setTabs] = useState([]);
   const [tabNames, setTabNames] = useState({});
-  const [tabUnreads, setTabUnreads] = useState({});
+  const [tabUnreads, setTabUnreads] = useState({}); 
   const [activeTab, setActiveTab] = useState(null);
   const [selectedImg, setSelectedImg] = useState(null);
   const [imgModalVisible, setImgModalVisible] = useState(false);
@@ -206,13 +201,15 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const slideAnim = useRef(new Animated.Value(700)).current;
   const msgRef = useRef(null);
   const presenceRef = useRef(null);
-  const tabsListenerRef = useRef(null);
+  const tabsListenerRef = useRef(null); 
   const recTimerRef = useRef(null);
   const statusIntervalRef = useRef(null);
 
   const myUid = firebaseAuth.currentUser?.uid;
   const isDirectChat = chatId?.startsWith('p_');
   const activePid = role === 'pharmacy' ? myUid : (isDirectChat ? pharmacyId : (activeTab || pharmacyId));
+  
+  // 🔥 تمرير الـ insets للستايل ليتم حساب الحواف ديناميكياً بدون اصطدام الـ Layout
   const st = mkStyles(theme, insets);
 
   const formatTimeAgo = (timestamp) => {
@@ -253,6 +250,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   useEffect(() => {
     Animated.timing(slideAnim, { toValue: visible ? 0 : 700, duration: 300, useNativeDriver: true }).start();
     let isMounted = true;
+
     if (msgRef.current) { msgRef.current(); msgRef.current = null; }
     if (presenceRef.current) { presenceRef.current(); presenceRef.current = null; }
     if (tabsListenerRef.current) { tabsListenerRef.current(); tabsListenerRef.current = null; }
@@ -265,6 +263,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       setMessages([]);
       setActiveTab(null);
       setUserStatus('جاري التحميل...');
+
       if (role === 'patient' && !isDirectChat) {
         startListenTabs(isMounted);
       } else {
@@ -273,9 +272,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         startListen(chatId, currentPid);
       }
     }
-    return () => {
+    return () => { 
       isMounted = false;
-      if (msgRef.current) msgRef.current();
+      if (msgRef.current) msgRef.current(); 
       if (presenceRef.current) presenceRef.current();
       if (tabsListenerRef.current) tabsListenerRef.current();
       clearInterval(statusIntervalRef.current);
@@ -297,44 +296,46 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   }, [visible]);
 
   const startListenTabs = (isMounted) => {
-    try {
-      const ref = db.ref(`chats/${chatId}`);
-      const listener = ref.on('value', async (snap) => {
-        if (!snap.exists() || !isMounted) return;
-        const ids = [];
-        const unreads = {};
-        const names = { ...tabNames };
-        const ps = [];
-        snap.forEach(c => {
-          if (!['unreadPharmacy', 'unreadPatient'].includes(c.key)) {
-            const pid = c.key;
-            ids.push(pid);
-            unreads[pid] = c.val()?.unreadPatient || 0;
-            if (!names[pid]) {
-              ps.push(
-                db.ref(`users/${pid}`).once('value').then(s => {
-                  names[pid] = s.val()?.pharmacyName || `صيدلية(${pid.slice(0, 5)})`;
-                }).catch(() => {})
-              );
-            }
-          }
-        });
-        if (ps.length > 0) await Promise.all(ps).catch(() => {});
-        if (!isMounted) return;
-        setTabs(ids);
-        setTabNames(names);
-        setTabUnreads(unreads);
-        if (!activeTab) {
-          const targetPid = pharmacyId && ids.includes(pharmacyId) ? pharmacyId : ids[0];
-          if (targetPid) {
-            setActiveTab(targetPid);
-            db.ref(`chats/${chatId}/${targetPid}/unreadPatient`).set(0).catch(() => {});
-            startListen(chatId, targetPid);
+    const ref = db.ref(`chats/${chatId}`);
+    const listener = ref.on('value', async (snap) => {
+      if (!snap.exists() || !isMounted) return;
+      const ids = [];
+      const unreads = {};
+      const names = { ...tabNames };
+      const ps = [];
+
+      snap.forEach(c => {
+        if (!['unreadPharmacy', 'unreadPatient'].includes(c.key)) {
+          const pid = c.key;
+          ids.push(pid);
+          unreads[pid] = c.val()?.unreadPatient || 0;
+          if (!names[pid]) {
+            ps.push(
+              db.ref(`users/${pid}`).once('value').then(s => {
+                names[pid] = s.val()?.pharmacyName || `صيدلية(${pid.slice(0, 5)})`;
+              }).catch(() => {})
+            );
           }
         }
       });
-      tabsListenerRef.current = () => ref.off('value', listener);
-    } catch(e) { console.log(e); }
+
+      if (ps.length > 0) await Promise.all(ps).catch(() => {});
+      if (!isMounted) return;
+      
+      setTabs(ids);
+      setTabNames(names);
+      setTabUnreads(unreads);
+
+      if (!activeTab) {
+        const targetPid = pharmacyId && ids.includes(pharmacyId) ? pharmacyId : ids[0];
+        if (targetPid) {
+          setActiveTab(targetPid);
+          db.ref(`chats/${chatId}/${targetPid}/unreadPatient`).set(0).catch(() => {});
+          startListen(chatId, targetPid);
+        }
+      }
+    });
+    tabsListenerRef.current = () => ref.off('value', listener);
   };
 
   const selectTab = (pid) => {
@@ -344,47 +345,49 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   };
 
   const startListen = (cId, pid) => {
-    try {
-      if (msgRef.current) msgRef.current();
-      if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0).catch(() => {});
-      else db.ref(`chats/${cId}/${pid}/unreadPatient`).set(0).catch(() => {});
-      
-      const ref = db.ref(`chats/${cId}/${pid}/messages`).limitToLast(20);
-      const listener = ref.on('value', snap => {
-        const arr = [];
-        if (snap.exists()) {
-          snap.forEach(c => {
-            const msgData = c.val();
-            if (msgData.role !== role && !msgData.seen) {
-              db.ref(`chats/${cId}/${pid}/messages/${c.key}/seen`).set(true).catch(() => {});
-            }
-            arr.unshift({ id: c.key, ...msgData });
-          });
-        }
-        setMessages(arr);
-      });
-      msgRef.current = () => ref.off('value', listener);
-      if (presenceRef.current) presenceRef.current();
-      let target = pid;
-      if (role === 'pharmacy') {
-        target = isDirectChat ? cId.split('_')[1] : (localRequests?.find(r => r.id === cId)?.patientId || pid);
+    if (msgRef.current) msgRef.current();
+    if (role === 'pharmacy') db.ref(`chats/${cId}/${pid}/unreadPharmacy`).set(0).catch(() => {});
+    else db.ref(`chats/${cId}/${pid}/unreadPatient`).set(0).catch(() => {});
+
+    const ref = db.ref(`chats/${cId}/${pid}/messages`).limitToLast(40);
+    const listener = ref.on('value', snap => {
+      const arr = [];
+      if (snap.exists()) {
+        snap.forEach(c => {
+          const msgData = c.val();
+          if (msgData.role !== role && !msgData.seen) {
+            db.ref(`chats/${cId}/${pid}/messages/${c.key}/seen`).set(true).catch(() => {});
+          }
+          arr.unshift({ id: c.key, ...msgData });
+        });
       }
-      const uPresenceRef = db.ref(`users/${target}/presence`);
-      const updateStatusText = (snapData) => {
-        if (snapData?.online === true) {
-          setUserStatus('🟢 متصل الآن');
-        } else {
-          setUserStatus(`🕒 آخر ظهور ${formatTimeAgo(snapData?.lastSeen)}`);
-        }
-      };
-      uPresenceRef.on('value', s => {
-        const d = s.val();
-        updateStatusText(d);
-        clearInterval(statusIntervalRef.current);
-        statusIntervalRef.current = setInterval(() => updateStatusText(d), 10000);
-      });
-      presenceRef.current = () => uPresenceRef.off('value');
-    } catch (e) { console.log(e); }
+      setMessages(arr);
+    });
+
+    msgRef.current = () => ref.off('value', listener);
+
+    if (presenceRef.current) presenceRef.current();
+    let target = pid;
+    if (role === 'pharmacy') {
+      target = isDirectChat ? cId.split('_')[1] : (localRequests?.find(r => r.id === cId)?.patientId || pid);
+    }
+    
+    const uPresenceRef = db.ref(`users/${target}/presence`);
+    const updateStatusText = (snapData) => {
+      if (snapData?.online === true) {
+        setUserStatus('🟢 متصل الآن');
+      } else {
+        setUserStatus(`🕒 آخر ظهور ${formatTimeAgo(snapData?.lastSeen)}`);
+      }
+    };
+
+    uPresenceRef.on('value', s => {
+      const d = s.val();
+      updateStatusText(d);
+      clearInterval(statusIntervalRef.current);
+      statusIntervalRef.current = setInterval(() => updateStatusText(d), 10000);
+    });
+    presenceRef.current = () => uPresenceRef.off('value');
   };
 
   const triggerNotification = async (title, body) => {
@@ -410,6 +413,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     const msg = text.trim();
     if (!msg || !chatId || !activePid) return;
     setText('');
+
     if (isEditingMode && editingMsgId) {
       await db.ref(`chats/${chatId}/${activePid}/messages/${editingMsgId}`).update({ text: msg, isEdited: true }).catch(() => {});
       setIsEditingMode(false);
@@ -451,7 +455,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const sendImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return onToast('يرجى السماح بالوصول للمعرض', 'error');
-    const r = await ImagePicker.launchImageLibraryAsync({ quality: 0.2, base64: true });
+    const r = await ImagePicker.launchImageLibraryAsync({ quality: 0.3, base64: true });
     if (!r.canceled && r.assets[0]) {
       const b64 = `data:image/jpeg;base64,${r.assets[0].base64}`;
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
@@ -462,25 +466,16 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   };
 
   const startRecording = async () => {
-    try {
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') return onToast('يرجى السماح باستخدام الميكروفون', 'error');
-      
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldRouteThroughEarpieceIOS: false
-      }).catch(e => console.log(e));
-
-      const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY).catch(() => ({}));
-      if (rec && rec.getURI) {
-        setRecording(rec);
-        setIsRecording(true);
-        setRecSeconds(0);
-        recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
-      }
-    } catch(e) { console.log(e); }
+    const { status } = await Audio.requestPermissionsAsync();
+    if (status !== 'granted') return onToast('يرجى السماح باستخدام الميكروفون', 'error');
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true }).catch(() => {});
+    const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY).catch(() => ({}));
+    if (rec && rec.getURI) {
+      setRecording(rec);
+      setIsRecording(true);
+      setRecSeconds(0);
+      recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
+    }
   };
 
   const stopRecordingAndSend = async (doSend = true) => {
@@ -543,12 +538,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   if (!visible) return null;
 
   return (
-    <Animated.View style={[st.container, {
-      transform: [{ translateY: slideAnim }],
-      backgroundColor: theme?.cardBg || '#ffffff',
-      paddingTop: insets.top,
-      paddingBottom: insets.bottom,
-    }]}>
+    <Animated.View style={[st.container, { transform: [{ translateY: slideAnim }], backgroundColor: theme?.cardBg || '#ffffff' }]}>
       <View style={st.header}>
         <View style={{ flex: 1 }}>
           <Text style={st.headerTitle} numberOfLines={1}>{requestName || 'المحادثة'}</Text>
@@ -563,8 +553,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         <ScrollView horizontal style={[st.tabsBar, { borderBottomColor: theme?.border || '#ccc', backgroundColor: theme?.bg || '#f9f9f9' }]} showsHorizontalScrollIndicator={false}>
           {tabs.map(tid => (
             <TouchableOpacity key={tid}
-              style={[st.tabBtn, {
-                borderColor: tabUnreads[tid] > 0 ? '#e53935' : (theme?.border || '#ccc'),
+              style={[st.tabBtn, { 
+                borderColor: tabUnreads[tid] > 0 ? '#e53935' : (theme?.border || '#ccc'), 
                 backgroundColor: activeTab === tid ? (theme?.primary || '#00796b') : (theme?.cardBg || '#fff'),
                 flexDirection: 'row', alignItems: 'center', gap: 6
               }]}
@@ -578,10 +568,11 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         </ScrollView>
       )}
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : null} // ✅ الأندرويد يعمل بامتياز بدون behavior عند استخدام الحواف الآمنة
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      {/* الـ keyboardVerticalOffset تمت موازنته ليتطابق مع الحواف العليا للجهاز السفلي بشكل ممتاز */}
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 + insets.bottom : 0}
       >
         <FlatList
           ref={listRef}
@@ -590,17 +581,14 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           style={[st.msgList, { backgroundColor: theme?.chatBg || '#efeae2' }]}
           contentContainerStyle={{ padding: 14, paddingBottom: 20 }}
           inverted
-          removeClippedSubviews={Platform.OS === 'android'}
-          initialNumToRender={8}
-          maxToRenderPerBatch={8}
-          windowSize={3}
           renderItem={({ item }) => {
             const isMe = item.role === role;
             const defaultBg = isMe ? (theme?.primary || '#00796b') : '#dcf8c6';
+            
             return (
               <View style={[st.msgWrap, isMe ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
-                <TouchableOpacity
-                  activeOpacity={0.8}
+                <TouchableOpacity 
+                  activeOpacity={0.8} 
                   onLongPress={() => handleLongPressMessage(item)}
                   style={[st.bubble, { backgroundColor: defaultBg },
                     item.isDeleted && { backgroundColor: theme?.bg || '#f5f5f5', borderWidth: 1, borderColor: theme?.border || '#ccc' }
@@ -627,9 +615,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                       )}
                     </View>
                   )}
+
                   {item.image && (
-                    // ✅ حاوي الصورة بأبعاد ثابتة تماماً لمنع متصفح الـ Layout من الكراش أثناء القياس الديناميكي
-                    <View style={st.imageContainerBox}>
+                    <View style={st.imageBoxContainer}>
                       <TouchableOpacity onPress={() => handleOpenImage(item.image)}>
                         <Image source={{ uri: item.image }} style={st.msgImg} resizeMode="cover" />
                       </TouchableOpacity>
@@ -645,7 +633,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
                       )}
                     </View>
                   )}
+
                   {item.audio && <AudioPlayer uri={item.audio} isMe={isMe} timestamp={item.timestamp} seen={item.seen} />}
+
                   {item.locationUrl && (
                     <View>
                       <TouchableOpacity onPress={() => Linking.openURL(item.locationUrl)} style={st.locBubble}>
@@ -698,6 +688,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           </View>
         )}
 
+        {/* حقل الإدخال السفلي محمي هنا باستخدام paddingBottom من الـ insets لعدم الالتصاق بالشريط السفلي */}
         <View style={[st.inputArea, { backgroundColor: theme?.cardBg || '#fff', borderTopColor: theme?.border || '#ccc' }]}>
           {!isEditingMode && (
             <TouchableOpacity onPress={sendImage} style={st.iconBtn}>
@@ -714,6 +705,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
               <Text style={{ fontSize: 21 }}>{isRecording ? '🔴' : '🎙️'}</Text>
             </TouchableOpacity>
           )}
+
           {isRecording ? (
             <View style={{ flex: 1 }}>
               <RecordingIndicator seconds={recSeconds} />
@@ -721,17 +713,19 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           ) : (
             <TextInput
               style={[st.chatInput, { backgroundColor: theme?.bg || '#f5f5f5', borderColor: theme?.border || '#ccc', color: theme?.text || '#000' }]}
-              placeholder={isEditingMode ? "عدل رسالتك هنا..." : "اكتب رسالتك..."}
+              placeholder={isEditingMode ? "عدل رسالتك هنا..." : "اكتب رسالتك..."} 
               placeholderTextColor={theme?.subText || '#999'}
               value={text} onChangeText={setText} textAlign="right"
               onSubmitEditing={sendMsg}
             />
           )}
+
           {!isRecording && text.trim().length === 0 && role === 'patient' && (
             <TouchableOpacity style={st.iconBtn} onPress={sendLocation}>
               <Text style={{ fontSize: 21 }}>📍</Text>
             </TouchableOpacity>
           )}
+
           {!isRecording && (
             <TouchableOpacity style={[st.sendBtn, { backgroundColor: isEditingMode ? '#00c853' : (theme?.primary || '#00796b') }]} onPress={sendMsg}>
               <Text style={{ color: 'white', fontWeight: 'bold' }}>{isEditingMode ? 'حفظ' : 'إرسال'}</Text>
@@ -752,26 +746,31 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   );
 }
 
+// 🔥 هنا هندسة الحواف الحقيقية: دمج الـ theme مع الـ insets ديناميكياً
 const mkStyles = (t, insets) => StyleSheet.create({
   container: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20000 },
-  header: {
-    backgroundColor: '#00796b',
-    padding: 15,
-    paddingTop: 15,
-    flexDirection: 'row',
-    alignItems: 'center'
+  
+  // حماية الهيدر العلوي من الـ Notch أو كاميرا الأندرويد الأمامية تلقائياً
+  header: { 
+    backgroundColor: '#00796b', 
+    paddingHorizontal: 15, 
+    paddingBottom: 15,
+    paddingTop: Platform.OS === 'android' ? (insets.top > 0 ? insets.top + 10 : 35) : insets.top + 10, 
+    flexDirection: 'row', 
+    alignItems: 'center' 
   },
+  
   headerTitle: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   statusTxt: { color: '#b2dfdb', fontSize: 11, marginTop: 2, fontWeight: '500' },
   tabsBar: { maxHeight: 54, borderBottomWidth: 1, paddingHorizontal: 10 },
   tabBtn: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 20, borderWidth: 1, marginRight: 8, marginVertical: 8 },
-  tabRedDot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#e53935' },
+  tabRedDot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#e53935' }, 
   msgList: { flex: 1 },
   msgWrap: { marginBottom: 8 },
   bubble: { maxWidth: '78%', padding: 9, borderRadius: 12 },
   msgTxt: { fontSize: 14, lineHeight: 20, textAlign: 'right', paddingBottom: 2 },
   editedLabel: { fontSize: 10, color: 'rgba(0,0,0,0.4)', fontStyle: 'italic' },
-  imageContainerBox: { width: 210, height: 170, overflow: 'hidden', borderRadius: 8, marginTop: 2 }, // ✅ حماية أبعاد حاوي الصورة
+  imageBoxContainer: { width: 210, height: 170, overflow: 'hidden', borderRadius: 8, marginTop: 2 },
   msgImg: { width: 210, height: 170 },
   locBubble: { padding: 8, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 7, marginTop: 2 },
   quickBar: { maxHeight: 50, borderTopWidth: 1, paddingHorizontal: 8 },
@@ -780,13 +779,24 @@ const mkStyles = (t, insets) => StyleSheet.create({
   editIndicatorBar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingVertical: 6, borderTopWidth: 1, alignItems: 'center' },
   editIndicatorLabel: { fontSize: 11, fontStyle: 'italic' },
   cancelEditTxt: { color: '#f44336', fontSize: 12, fontWeight: 'bold' },
-  inputArea: { flexDirection: 'row', padding: 10, gap: 7, borderTopWidth: 1, alignItems: 'center' },
+  
+  // حماية شريط الكتابة من شريط التنقل السفلي للأندرويد والإيماءات للآيفون
+  inputArea: { 
+    flexDirection: 'row', 
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? (insets.bottom > 0 ? insets.bottom : 10) : (insets.bottom > 0 ? insets.bottom + 6 : 12),
+    gap: 7, 
+    borderTopWidth: 1, 
+    alignItems: 'center' 
+  },
+  
   iconBtn: { padding: 5 },
   iconBtnRecording: { backgroundColor: 'rgba(244,67,54,0.15)', borderRadius: 20, padding: 8 },
-  chatInput: { flex: 1, padding: 10, borderWidth: 1, borderRadius: 20, fontSize: 14 },
+  chatInput: { flex: 1, padding: 10, borderWidth: 1, borderRadius: 20, fontSize: 14, maxHeight: 45 },
   sendBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20 },
   modalBackground: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
-  closeImgBtn: { position: 'absolute', top: (insets?.top || 0) + 10, right: 25, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.25)', width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center' },
+  closeImgBtn: { position: 'absolute', top: Platform.OS === 'android' ? (insets.top > 0 ? insets.top + 10 : 30) : insets.top + 15, right: 25, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.25)', width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center' },
   closeImgTxt: { color: 'white', fontSize: 32, fontWeight: '300', marginTop: -4 },
   fullImage: { width: '100%', height: '80%' },
   metaContainer: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginTop: 3, gap: 3, alignSelf: 'flex-start' },
@@ -794,3 +804,4 @@ const mkStyles = (t, insets) => StyleSheet.create({
   timeText: { fontSize: 9.5, fontWeight: '400' },
   waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 }
 });
+
