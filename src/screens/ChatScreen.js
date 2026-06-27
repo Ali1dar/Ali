@@ -34,7 +34,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const listRef = useRef(null);
   const slideAnim = useRef(new Animated.Value(700)).current;
   
-  // 🔥 متحرك ديناميكي لحساب ارتفاع الكيبورد بدقة بالبكسل
+  // 🔥 حساب حركة الكيبورد فوريًا
   const keyboardHeight = useRef(new Animated.Value(0)).current;
 
   const msgRef = useRef(null);
@@ -45,11 +45,10 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   const myUid = firebaseAuth.currentUser?.uid;
   const isDirectChat = chatId?.startsWith('p_');
-  const activePid = role === 'pharmacy' ? myUid : (isDirectChat ? pharmacyId : (activeTab || pharmacyId));
   
   const st = mkStyles(theme, insets);
 
-  // 🔥 الاستماع المباشر لكيبورد النظام وتحريك الشاشة يدوياً
+  // 🛠️ الاستماع الدقيق لحركات الكيبورد لتقليص الشاشة بأكملها
   useEffect(() => {
     if (!visible) return;
 
@@ -59,20 +58,17 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     const showSubscription = Keyboard.addListener(showEvent, (e) => {
       Animated.timing(keyboardHeight, {
         toValue: e.endCoordinates.height,
-        duration: Platform.OS === 'ios' ? e.duration : 150,
-        useNativeDriver: false, // يجب أن يكون false لأننا نقوم بتحريك padding/margin سفلي
+        duration: Platform.OS === 'ios' ? e.duration : 100, // سرعة إضافية للأندرويد لحل التباطؤ
+        useNativeDriver: false,
       }).start(() => {
-        // دفع القائمة للأسفل تلقائياً لتبدأ من فوق الكيبورد مباشرة
-        if (messages.length > 0) {
-          listRef.current?.scrollToOffset({ offset: 0, animated: true });
-        }
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
       });
     });
 
     const hideSubscription = Keyboard.addListener(hideEvent, (e) => {
       Animated.timing(keyboardHeight, {
         toValue: 0,
-        duration: Platform.OS === 'ios' ? e.duration : 150,
+        duration: Platform.OS === 'ios' ? e.duration : 100,
         useNativeDriver: false,
       }).start();
     });
@@ -81,7 +77,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [visible, messages]);
+  }, [visible]);
 
   useEffect(() => {
     Animated.timing(slideAnim, { toValue: visible ? 0 : 700, duration: 300, useNativeDriver: true }).start();
@@ -117,12 +113,20 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     };
   }, [visible, chatId]);
 
-  // ... (دوال startListenTabs, selectTab, startListen, sendMsg المذكورة سابقاً تبقى بدون تعديل لتجنب تلف البيانات) ...
+  // ... (بقية الدوال الداخلية startListenTabs, sendMsg الخ تبقى مستقرة ودون تغيير) ...
 
   if (!visible) return null;
 
   return (
-    <Animated.View style={[st.container, { transform: [{ translateY: slideAnim }], backgroundColor: theme?.cardBg || '#ffffff' }]}>
+    /* 🔥 التغيير الجذري هنا: جعل الحاوية المطلقة تنتهي (bottom) عند بداية الكيبورد تماماً */
+    <Animated.View style={[
+      st.container, 
+      { 
+        transform: [{ translateY: slideAnim }], 
+        backgroundColor: theme?.cardBg || '#ffffff',
+        bottom: keyboardHeight // الشاشة بالكامل تتقلص وتصعد مع صعود الكيبورد حتمياً!
+      }
+    ]}>
       {/* هيدر الشاشة */}
       <View style={st.header}>
         <View style={{ flex: 1 }}>
@@ -155,7 +159,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         </View>
       )}
 
-      {/* منطقة الرسائل الفليكسبيبل التي تتقلص عند رفع الكيبورد يدويًا */}
+      {/* منطقة الرسائل الفليكسبيبل */}
       <View style={{ flex: 1, backgroundColor: theme?.chatBg || '#efeae2' }}>
         <FlatList
           ref={listRef}
@@ -212,8 +216,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         </View>
       )}
 
-      {/* 🔥 هنا مربط الفرس الجذري: البار السفلي مغلّف بـ Animated.View يتأثر بقيمة ارتفاع الكيبورد بشكل فوري ومباشر */}
-      <Animated.View style={[
+      {/* شريط الإدخال السفلي الثابت (يتأثر فقط بـ safe area عند إغلاق الكيبورد) */}
+      <View style={[
         st.inputArea, 
         { 
           backgroundColor: theme?.cardBg || '#fff', 
@@ -221,8 +225,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           paddingBottom: keyboardHeight.interpolate({
             inputRange: [0, 1],
             outputRange: [Platform.OS === 'ios' ? (insets.bottom > 0 ? insets.bottom : 8) : (insets.bottom > 0 ? insets.bottom + 4 : 10), 10]
-          }),
-          marginBottom: keyboardHeight // يدفع البار بالكامل للأعلى بنفس طول الكيبورد الفعلي للـ Android / iOS
+          })
         }
       ]}>
         {!isEditingMode && (
@@ -267,7 +270,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
             <Text style={{ color: 'white', fontWeight: 'bold' }}>{isEditingMode ? 'حفظ' : 'إرسال'}</Text>
           </TouchableOpacity>
         )}
-      </Animated.View>
+      </View>
 
       {/* مودال الصور */}
       <Modal visible={imgModalVisible} transparent animationType="fade">
@@ -283,7 +286,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 }
 
 const mkStyles = (t, insets) => StyleSheet.create({
-  container: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20000 },
+  // تم حذف الـ bottom: 0 الثابت وتمريره ديناميكياً بالأعلى تبعاً للكيبورد
+  container: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20000 },
   header: { 
     backgroundColor: '#00796b', 
     paddingHorizontal: 15, 
@@ -310,7 +314,6 @@ const mkStyles = (t, insets) => StyleSheet.create({
   editIndicatorLabel: { fontSize: 11, fontStyle: 'italic' },
   cancelEditTxt: { color: '#f44336', fontSize: 12, fontWeight: 'bold' },
   
-  // شريط الكتابة
   inputArea: { 
     flexDirection: 'row-reverse',
     paddingHorizontal: 8,
