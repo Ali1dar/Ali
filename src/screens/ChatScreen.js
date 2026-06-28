@@ -9,6 +9,7 @@ import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
 import { db, firebaseAuth } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ✅ إضافة
 
 const formatMsgTime = (ts) => {
   if (!ts) return '';
@@ -180,6 +181,7 @@ const ri = StyleSheet.create({
 export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role, requestName, localRequests, onToast }) {
   const { theme } = useTheme();
   const st = mkStyles(theme);
+  const insets = useSafeAreaInsets(); // ✅ إضافة
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
@@ -519,6 +521,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   if (!visible) return null;
 
+  // ✅ حساب paddingBottom الديناميكي بناءً على شريط التنقل الحقيقي
+  const bottomInset = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'android' ? 12 : 10);
+
   return (
     <Animated.View style={[st.container, {
       transform: [{ translateY: slideAnim }],
@@ -668,8 +673,15 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           </View>
         )}
 
-        {/* ✅ paddingBottom لمنع اختفاء شريط الكتابة خلف شريط التنقل */}
-        <View style={[st.inputArea, { backgroundColor: theme?.cardBg || '#fff', borderTopColor: theme?.border || '#ccc' }]}>
+        {/* ✅ paddingBottom ديناميكي يتكيف مع كل هاتف */}
+        <View style={[
+          st.inputArea,
+          {
+            backgroundColor: theme?.cardBg || '#fff',
+            borderTopColor: theme?.border || '#ccc',
+            paddingBottom: bottomInset,
+          }
+        ]}>
           {!isEditingMode && (
             <TouchableOpacity onPress={sendImage} style={st.iconBtn}>
               <Text style={{ fontSize: 21 }}>📷</Text>
@@ -758,11 +770,10 @@ const mkStyles = (t) => StyleSheet.create({
   editIndicatorLabel: { fontSize: 11, fontStyle: 'italic' },
   cancelEditTxt: { color: '#f44336', fontSize: 12, fontWeight: 'bold' },
 
-  // ✅ paddingBottom يمنع اختفاء شريط الكتابة خلف شريط التنقل
+  // ✅ أُزيل paddingBottom الثابت — يُطبَّق الآن بشكل ديناميكي من bottomInset
   inputArea: {
     flexDirection: 'row',
     padding: 10,
-    paddingBottom: Platform.OS === 'android' ? 25 : 10,
     gap: 7,
     borderTopWidth: 1,
     alignItems: 'center',
@@ -791,3 +802,4 @@ const mkStyles = (t) => StyleSheet.create({
   timeText: { fontSize: 9.5, fontWeight: '400' },
   waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 },
 });
+
