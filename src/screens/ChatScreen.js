@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList,
-  Image, Animated, Platform, Linking, ScrollView, KeyboardAvoidingView, BackHandler, Modal, Alert
+  Image, Animated, Platform, Linking, ScrollView, BackHandler, Modal, Alert, Keyboard
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
@@ -197,6 +197,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const [imgModalVisible, setImgModalVisible] = useState(false);
   const [editingMsgId, setEditingMsgId] = useState(null);
   const [isEditingMode, setIsEditingMode] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const listRef = useRef(null);
   const slideAnim = useRef(new Animated.Value(700)).current;
@@ -290,6 +291,16 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   useEffect(() => {
     if (!visible && isRecording) stopRecordingAndSend(false);
   }, [visible]);
+
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', e => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const startListenTabs = (isMounted) => {
     const ref = db.ref(`chats/${chatId}`);
@@ -557,12 +568,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         </ScrollView>
       )}
 
-      {/* ✅ التعديل الرئيسي: إزالة behavior على Android */}
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
+      <View style={{ flex: 1, paddingBottom: keyboardHeight }}>
         <FlatList
           ref={listRef}
           data={messages}
@@ -720,7 +726,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
             </TouchableOpacity>
           )}
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
       <Modal visible={imgModalVisible} transparent animationType="fade">
         <View style={st.modalBackground}>
@@ -799,3 +805,4 @@ const mkStyles = (t) => StyleSheet.create({
   timeText: { fontSize: 9.5, fontWeight: '400' },
   waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 },
 });
+
