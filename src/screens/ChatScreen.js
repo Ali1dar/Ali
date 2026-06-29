@@ -9,7 +9,7 @@ import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
 import { db, firebaseAuth } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ✅ إضافة
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const formatMsgTime = (ts) => {
   if (!ts) return '';
@@ -181,7 +181,7 @@ const ri = StyleSheet.create({
 export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role, requestName, localRequests, onToast }) {
   const { theme } = useTheme();
   const st = mkStyles(theme);
-  const insets = useSafeAreaInsets(); // ✅ إضافة
+  const insets = useSafeAreaInsets();
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
@@ -521,7 +521,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   if (!visible) return null;
 
-  // ✅ حساب paddingBottom الديناميكي بناءً على شريط التنقل الحقيقي
   const bottomInset = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'android' ? 12 : 10);
 
   return (
@@ -558,10 +557,11 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         </ScrollView>
       )}
 
+      {/* ✅ التعديل الرئيسي: إزالة behavior على Android */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <FlatList
           ref={listRef}
@@ -673,7 +673,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
           </View>
         )}
 
-        {/* ✅ paddingBottom ديناميكي يتكيف مع كل هاتف */}
         <View style={[
           st.inputArea,
           {
@@ -769,8 +768,6 @@ const mkStyles = (t) => StyleSheet.create({
   editIndicatorBar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingVertical: 6, borderTopWidth: 1, alignItems: 'center' },
   editIndicatorLabel: { fontSize: 11, fontStyle: 'italic' },
   cancelEditTxt: { color: '#f44336', fontSize: 12, fontWeight: 'bold' },
-
-  // ✅ أُزيل paddingBottom الثابت — يُطبَّق الآن بشكل ديناميكي من bottomInset
   inputArea: {
     flexDirection: 'row',
     padding: 10,
@@ -802,4 +799,3 @@ const mkStyles = (t) => StyleSheet.create({
   timeText: { fontSize: 9.5, fontWeight: '400' },
   waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 },
 });
-
