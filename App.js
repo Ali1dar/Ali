@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+Enterimport React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Platform, Alert, BackHandler, ImageBackground
@@ -8,6 +8,11 @@ import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/utils/ThemeContext';
 import { firebaseAuth, db } from './src/utils/firebase';
+
+import * as ImagePicker from 'expo-image-picker';
+import { Audio } from 'expo-av';
+import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
 
 import {
   registerForPushNotifications,
@@ -23,6 +28,19 @@ import NearbyScreen from './src/screens/NearbyScreen';
 import InboxScreen from './src/screens/InboxScreen';
 import SubscriptionOverlay from './src/components/SubscriptionOverlay';
 import Toast from './src/components/Toast';
+
+// ✅ دالة طلب جميع الأذونات دفعة واحدة عند فتح التطبيق
+async function requestAllPermissions() {
+  try {
+    await ImagePicker.requestCameraPermissionsAsync();
+    await ImagePicker.requestMediaLibraryPermissionsAsync();
+    await Audio.requestPermissionsAsync();
+    await Location.requestForegroundPermissionsAsync();
+    await Notifications.requestPermissionsAsync();
+  } catch (e) {
+    console.log('خطأ بطلب الأذونات:', e);
+  }
+}
 
 function AppContent() {
   const { theme, isDark, toggle } = useTheme();
@@ -46,6 +64,11 @@ function AppContent() {
   useEffect(() => {
     stateRef.current = { chatOpen, settingsOpen, nearbyOpen, inboxOpen, user };
   }, [chatOpen, settingsOpen, nearbyOpen, inboxOpen, user]);
+
+  // ✅ طلب جميع الأذونات فور فتح التطبيق
+  useEffect(() => {
+    requestAllPermissions();
+  }, []);
 
   const showToast = (msg, type = 'info') => {
     setToast({ msg, type, visible: true });
