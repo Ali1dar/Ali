@@ -13,6 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
 import messaging from '@react-native-firebase/messaging';
+import { PermissionsAndroid } from 'react-native';
 
 import {
   registerForPushNotifications,
@@ -36,7 +37,15 @@ async function requestAllPermissions() {
     await ImagePicker.requestMediaLibraryPermissionsAsync();
     await Audio.requestPermissionsAsync();
     await Location.requestForegroundPermissionsAsync();
-    await messaging().requestPermission(); // إذن الإشعارات عبر Firebase
+
+    // إذن الإشعارات: Android 13+ يحتاج PermissionsAndroid صراحة
+    if (Platform.OS === 'android' && Platform.Version >= 33) {
+      await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+      );
+    } else {
+      await messaging().requestPermission();
+    }
   } catch (e) {
     console.log('خطأ بطلب الأذونات:', e);
   }
@@ -409,4 +418,3 @@ const s = StyleSheet.create({
   },
   hBtnTxt: { color: 'white', fontSize: 14, fontWeight: 'bold' },
 });
-
