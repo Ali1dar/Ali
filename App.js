@@ -1,4 +1,4 @@
-Enterimport React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Platform, Alert, BackHandler, ImageBackground
