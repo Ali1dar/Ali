@@ -10,7 +10,7 @@ import { ThemeProvider, useTheme } from './src/utils/ThemeContext';
 import { firebaseAuth, db } from './src/utils/firebase';
 
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
+import { AudioModule } from 'expo-audio';
 import * as Location from 'expo-location';
 import messaging from '@react-native-firebase/messaging';
 import { PermissionsAndroid } from 'react-native';
@@ -35,7 +35,7 @@ async function requestAllPermissions() {
   try {
     await ImagePicker.requestCameraPermissionsAsync();
     await ImagePicker.requestMediaLibraryPermissionsAsync();
-    await Audio.requestPermissionsAsync();
+    await AudioModule.requestRecordingPermissionsAsync();
     await Location.requestForegroundPermissionsAsync();
 
     // إذن الإشعارات: Android 13+ يحتاج PermissionsAndroid صراحة
