@@ -5,7 +5,7 @@ import {
   Image, Animated, Platform, Linking, ScrollView, BackHandler, Modal, Alert, Keyboard
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
+import { useAudioPlayer, useAudioPlayerStatus, useAudioRecorder, useAudioRecorderState, RecordingPresets, AudioModule, setAudioModeAsync } from 'expo-audio';
 import * as Location from 'expo-location';
 import { db, firebaseAuth } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
@@ -22,70 +22,27 @@ const formatMsgTime = (ts) => {
 };
 
 function AudioPlayer({ uri, isMe, timestamp, seen }) {
-  const [sound, setSound] = useState(null);
-  const [playing, setPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [position, setPosition] = useState(0);
+  const player = useAudioPlayer(uri);
+  const status = useAudioPlayerStatus(player);
   const [rate, setRate] = useState(1.0);
-  const intervalRef = useRef(null);
 
-  useEffect(() => {
-    return () => {
-      if (sound) sound.unloadAsync();
-      clearInterval(intervalRef.current);
-    };
-  }, [sound]);
+  const playing = status.playing;
+  const duration = (status.duration || 0) * 1000;
+  const position = (status.currentTime || 0) * 1000;
 
-  const loadAndPlay = async () => {
-    try {
-      if (sound) {
-        const status = await sound.getStatusAsync();
-        if (status.isPlaying) {
-          await sound.pauseAsync();
-          setPlaying(false);
-          clearInterval(intervalRef.current);
-        } else {
-          await sound.playAsync();
-          setPlaying(true);
-          startTracking(sound);
-        }
-        return;
-      }
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
-      const { sound: s, status } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true, rate, shouldCorrectPitch: true }
-      );
-      setSound(s);
-      setDuration(status.durationMillis || 0);
-      setPlaying(true);
-      startTracking(s);
-      s.setOnPlaybackStatusUpdate(st => {
-        if (st.didJustFinish) {
-          setPlaying(false);
-          setPosition(0);
-          clearInterval(intervalRef.current);
-          s.unloadAsync();
-          setSound(null);
-        }
-      });
-    } catch (e) {
-      console.log('خطأ تشغيل الصوت:', e);
+  const loadAndPlay = () => {
+    if (playing) {
+      player.pause();
+    } else {
+      if (duration > 0 && position >= duration) player.seekTo(0);
+      player.play();
     }
   };
 
-  const startTracking = (s) => {
-    clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(async () => {
-      const st = await s.getStatusAsync();
-      if (st.isLoaded) setPosition(st.positionMillis || 0);
-    }, 300);
-  };
-
-  const toggleRate = async () => {
+  const toggleRate = () => {
     const newRate = rate === 1.0 ? 1.5 : rate === 1.5 ? 2.0 : 1.0;
     setRate(newRate);
-    if (sound) await sound.setRateAsync(newRate, true);
+    player.setPlaybackRate(newRate);
   };
 
   const fmtTime = (ms) => {
@@ -185,7 +142,8 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
-  const [recording, setRecording] = useState(null);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(recorder);
   const [isRecording, setIsRecording] = useState(false);
   const [recSeconds, setRecSeconds] = useState(0);
   const [userStatus, setUserStatus] = useState('');
@@ -463,25 +421,28 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   };
 
   const startRecording = async () => {
-    const { status } = await Audio.requestPermissionsAsync();
-    if (status !== 'granted') return onToast('يرجى السماح باستخدام الميكروفون', 'error');
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-    const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-    setRecording(rec);
-    setIsRecording(true);
-    setRecSeconds(0);
-    recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
+    try {
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (!permission.granted) return onToast('يرجى السماح باستخدام الميكروفون', 'error');
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setIsRecording(true);
+      setRecSeconds(0);
+      recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
+    } catch (e) {
+      console.log('خطأ بدء التسجيل:', e);
+    }
   };
 
   const stopRecordingAndSend = async (doSend = true) => {
     clearInterval(recTimerRef.current);
     setIsRecording(false);
     setRecSeconds(0);
-    if (!recording) return;
+    if (!recorderState.isRecording) return;
     try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecording(null);
+      await recorder.stop();
+      const uri = recorder.uri;
       if (doSend && uri && chatId && activePid) {
         const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
         await ref.set({ role, audio: uri, timestamp: Date.now(), seen: false });
@@ -489,7 +450,6 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
         triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'مريض', '🎙️ أرسل رسالة صوتية');
       }
     } catch (e) {
-      setRecording(null);
       console.log('خطأ إيقاف التسجيل:', e);
     }
   };
@@ -805,4 +765,3 @@ const mkStyles = (t) => StyleSheet.create({
   timeText: { fontSize: 9.5, fontWeight: '400' },
   waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 },
 });
-
