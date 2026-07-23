@@ -6,17 +6,20 @@ import {
   ScrollView, Dimensions, Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { firebaseAuth, db, arabicError } from '../utils/firebase';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPhoneNumber,
+} from 'firebase/auth';
+import { firebaseAuth, db, arabicError, firebaseConfig } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 import ProvincePicker from '../components/ProvincePicker';
 
-// 🛑 تم حذف استيراد مكتبة الـ messaging النيتف المسببة للكراش الفوري
 const { width } = Dimensions.get('window');
 
-// ✅ دالة آمنة لحفظ التوكن عند تسجيل الدخول
 const saveFcmToken = async (uid) => {
   try {
-    // يمكنك استدعاء نفس منطق جلب التوكن الخاص بـ Expo هنا إذا رغبت، أو تحديث حقول المستخدم بآمان
     console.log('سيتم التعامل مع التوكن عبر نظام إشعارات Expo المستدعى في App.js');
   } catch (e) {
     console.log('❌ خطأ في حفظ التوكن:', e);
@@ -36,6 +39,7 @@ export default function AuthScreen({ onToast }) {
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const confirmRef = useRef(null);
+  const recaptchaVerifier = useRef(null);
 
   const handlePharmacyWhatsApp = () => {
     const phoneNumber = '9647823017544';
@@ -55,11 +59,11 @@ export default function AuthScreen({ onToast }) {
     setLoading(true);
     try {
       if (isLogin) {
-        const cred = await firebaseAuth.signInWithEmailAndPassword(email.trim(), password.trim());
+        const cred = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password.trim());
         await saveFcmToken(cred.user.uid);
       } else {
         if (!fullName.trim()) { setLoading(false); return onToast('يرجى كتابة الاسم الكامل', 'error'); }
-        const cred = await firebaseAuth.createUserWithEmailAndPassword(email.trim(), password.trim());
+        const cred = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password.trim());
         await db.ref(`users/${cred.user.uid}`).set({
           role: 'patient', patientName: fullName.trim(), email: email.trim(),
           province, subscriptionExpiry: Date.now() + 30 * 86400000,
@@ -79,7 +83,7 @@ export default function AuthScreen({ onToast }) {
     if (!p.startsWith('+')) p = '+' + p;
     setLoading(true);
     try {
-      confirmRef.current = await firebaseAuth.signInWithPhoneNumber(p);
+      confirmRef.current = await signInWithPhoneNumber(firebaseAuth, p, recaptchaVerifier.current);
       setOtpSent(true);
       onToast('تم إرسال رمز التفعيل 💬');
     } catch (e) { 
@@ -118,6 +122,12 @@ export default function AuthScreen({ onToast }) {
       style={{ flex: 1, backgroundColor: theme.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <FirebaseRecaptchaVerifierModal
+        ref={recaptchaVerifier}
+        firebaseConfig={firebaseConfig}
+        attemptInvisibleVerification
+      />
+
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
@@ -317,4 +327,3 @@ const styles = (theme) => StyleSheet.create({
     textAlign: 'center',
   },
 });
-
