@@ -1,33 +1,9 @@
 // src/utils/firebase.js
-import firebase from 'firebase/compat/app';
-import 'firebase/compat/database';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import database from '@react-native-firebase/database';
+import auth from '@react-native-firebase/auth';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDtVddk_FoOXoD7_xObpuC_HCjRg94wct4",
-  authDomain: "viralboost-web-38eec.firebaseapp.com",
-  databaseURL: "https://viralboost-web-38eec-default-rtdb.firebaseio.com",
-  projectId: "viralboost-web-38eec",
-  storageBucket: "viralboost-web-38eec.firebasestorage.app",
-  messagingSenderId: "195415969543",
-  appId: "1:195415969543:android:e5ce89d331e23852577fa2",
-};
-
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
-
-// المصادقة عبر الـ modular API مع حفظ الجلسة بـ AsyncStorage
-export const firebaseAuth = initializeAuth(firebase.app(), {
-  persistence: getReactNativePersistence(AsyncStorage),
-});
-
-// قاعدة البيانات تبقى compat (متوافقة مع db.ref(...) بكل الشاشات)
-export const db = firebase.database();
-
-// يُستخدم بواسطة FirebaseRecaptchaVerifierModal بشاشة تسجيل الدخول بالرقم
-export { firebaseConfig };
+export const db = database();
+export const firebaseAuth = auth();
 
 export const PROVINCES = [
   'بغداد','أربيل','الأنبار','بابل','البصرة','حلبجة',
