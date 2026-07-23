@@ -1,45 +1,19 @@
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
-import { Platform, PermissionsAndroid } from 'react-native';
+import messaging from '@react-native-firebase/messaging';
 import { db } from './src/utils/firebase';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
 
 export async function registerForPushNotifications(userId) {
   try {
-    if (!Device.isDevice) {
-      console.warn('⚠️ الإشعارات تحتاج جهاز حقيقي');
-      return null;
-    }
+    const authStatus = await messaging().requestPermission();
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-    if (Platform.OS === 'android' && Platform.Version >= 33) {
-      await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-      );
-    }
-
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
+    if (!enabled) {
       console.warn('❌ المستخدم رفض إذن الإشعارات');
       return null;
     }
 
-    // نفس نوع FCM token اللي كان يرجعه react-native-firebase
-    const tokenResponse = await Notifications.getDevicePushTokenAsync();
-    const token = tokenResponse.data;
+    const token = await messaging().getToken();
     console.log('✅ FCM Token:', token);
 
     await db.ref(`users/${userId}`).update({ fcm_token: token });
@@ -53,12 +27,12 @@ export async function registerForPushNotifications(userId) {
 }
 
 export function setupNotificationListeners(navigation) {
-  const foregroundSub = Notifications.addNotificationReceivedListener(notification => {
-    console.log('📩 إشعار وصل:', notification.request.content);
+  const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
+    console.log('📩 إشعار وصل:', remoteMessage);
   });
 
-  const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
-    const data = response.notification.request.content.data;
+  messaging().onNotificationOpenedApp(remoteMessage => {
+    const data = remoteMessage?.data;
     console.log('👆 ضغط على الإشعار:', data);
     if (data?.requestId && navigation) {
       navigation.navigate('OrderDetails', { requestId: data.requestId });
@@ -66,8 +40,7 @@ export function setupNotificationListeners(navigation) {
   });
 
   return () => {
-    foregroundSub.remove();
-    responseSub.remove();
+    unsubscribeForeground();
   };
 }
 
