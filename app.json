@@ -18,7 +18,7 @@
       "policy": "appVersion"
     },
     "android": {
-      "versionCode": 11,
+      "versionCode": 12,
       "targetSdkVersion": 36,
       "softwareKeyboardLayoutMode": "resize",
       "windowSoftInputMode": "adjustResize",
