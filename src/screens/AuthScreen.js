@@ -6,13 +6,7 @@ import {
   ScrollView, Dimensions, Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signInWithPhoneNumber,
-} from 'firebase/auth';
-import { firebaseAuth, db, arabicError, firebaseConfig } from '../utils/firebase';
+import { firebaseAuth, db, arabicError } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 import ProvincePicker from '../components/ProvincePicker';
 
@@ -39,7 +33,6 @@ export default function AuthScreen({ onToast }) {
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const confirmRef = useRef(null);
-  const recaptchaVerifier = useRef(null);
 
   const handlePharmacyWhatsApp = () => {
     const phoneNumber = '9647823017544';
@@ -59,11 +52,11 @@ export default function AuthScreen({ onToast }) {
     setLoading(true);
     try {
       if (isLogin) {
-        const cred = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password.trim());
+        const cred = await firebaseAuth.signInWithEmailAndPassword(email.trim(), password.trim());
         await saveFcmToken(cred.user.uid);
       } else {
         if (!fullName.trim()) { setLoading(false); return onToast('يرجى كتابة الاسم الكامل', 'error'); }
-        const cred = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password.trim());
+        const cred = await firebaseAuth.createUserWithEmailAndPassword(email.trim(), password.trim());
         await db.ref(`users/${cred.user.uid}`).set({
           role: 'patient', patientName: fullName.trim(), email: email.trim(),
           province, subscriptionExpiry: Date.now() + 30 * 86400000,
@@ -83,7 +76,7 @@ export default function AuthScreen({ onToast }) {
     if (!p.startsWith('+')) p = '+' + p;
     setLoading(true);
     try {
-      confirmRef.current = await signInWithPhoneNumber(firebaseAuth, p, recaptchaVerifier.current);
+      confirmRef.current = await firebaseAuth.signInWithPhoneNumber(p);
       setOtpSent(true);
       onToast('تم إرسال رمز التفعيل 💬');
     } catch (e) { 
@@ -122,18 +115,11 @@ export default function AuthScreen({ onToast }) {
       style={{ flex: 1, backgroundColor: theme.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaVerifier}
-        firebaseConfig={firebaseConfig}
-        attemptInvisibleVerification
-      />
-
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={s.header}>
           <LinearGradient
             colors={[theme.primary, '#00796b']}
@@ -147,7 +133,6 @@ export default function AuthScreen({ onToast }) {
           </TouchableOpacity>
         </View>
 
-        {/* Card */}
         <View style={[s.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
           <Text style={[s.title, { color: theme.primary }]}>
             {isLogin ? 'تسجيل الدخول' : 'حساب جديد'}
@@ -267,42 +252,16 @@ export default function AuthScreen({ onToast }) {
 }
 
 const styles = (theme) => StyleSheet.create({
-  header: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 20,
-    position: 'relative',
-  },
-  headerGradient: {
-    padding: 30,
-    alignItems: 'center',
-  },
-  appName: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 6,
-  },
-  appSub: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.85)',
-    textAlign: 'center',
-  },
+  header: { borderRadius: 16, overflow: 'hidden', marginBottom: 20, position: 'relative' },
+  headerGradient: { padding: 30, alignItems: 'center' },
+  appName: { fontSize: 28, fontWeight: 'bold', color: 'white', marginBottom: 6 },
+  appSub: { fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center' },
   themeBtn: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
+    position: 'absolute', top: 12, left: 12,
     backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20,
   },
-  card: {
-    padding: 22,
-    borderRadius: 16,
-    borderWidth: 1,
-    elevation: 4,
-  },
+  card: { padding: 22, borderRadius: 16, borderWidth: 1, elevation: 4 },
   title: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 4 },
   sub: { fontSize: 13, textAlign: 'center', marginBottom: 18 },
   tabs: { flexDirection: 'row', gap: 10, marginBottom: 18 },
@@ -311,19 +270,9 @@ const styles = (theme) => StyleSheet.create({
   btn: { padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 4, marginBottom: 10 },
   btnTxt: { color: 'white', fontSize: 16, fontWeight: 'bold' },
   pharmacyBtn: {
-    paddingVertical: 13,
-    paddingHorizontal: 15,
-    borderWidth: 1.5,
-    borderRadius: 8,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    backgroundColor: 'rgba(0,121,107,0.03)',
+    paddingVertical: 13, paddingHorizontal: 15, borderWidth: 1.5,
+    borderRadius: 8, borderStyle: 'dashed', alignItems: 'center',
+    justifyContent: 'center', width: '100%', backgroundColor: 'rgba(0,121,107,0.03)',
   },
-  pharmacyBtnTxt: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
+  pharmacyBtnTxt: { fontSize: 13, fontWeight: 'bold', textAlign: 'center' },
 });
