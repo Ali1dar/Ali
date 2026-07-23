@@ -1,7 +1,8 @@
 // src/utils/firebase.js
 import firebase from 'firebase/compat/app';
-import 'firebase/compat/auth';
 import 'firebase/compat/database';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDtVddk_FoOXoD7_xObpuC_HCjRg94wct4",
@@ -17,8 +18,16 @@ if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 }
 
+// المصادقة عبر الـ modular API مع حفظ الجلسة بـ AsyncStorage
+export const firebaseAuth = initializeAuth(firebase.app(), {
+  persistence: getReactNativePersistence(AsyncStorage),
+});
+
+// قاعدة البيانات تبقى compat (متوافقة مع db.ref(...) بكل الشاشات)
 export const db = firebase.database();
-export const firebaseAuth = firebase.auth();
+
+// يُستخدم بواسطة FirebaseRecaptchaVerifierModal بشاشة تسجيل الدخول بالرقم
+export { firebaseConfig };
 
 export const PROVINCES = [
   'بغداد','أربيل','الأنبار','بابل','البصرة','حلبجة',
