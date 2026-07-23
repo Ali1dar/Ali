@@ -74,7 +74,10 @@
       ],
       "expo-updates",
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      "@react-native-firebase/messaging"
     ],
     "extra": {
       "eas": {
