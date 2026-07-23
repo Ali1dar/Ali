@@ -1,9 +1,24 @@
 // src/utils/firebase.js
-import database from '@react-native-firebase/database';
-import auth from '@react-native-firebase/auth';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
+import 'firebase/compat/database';
 
-export const db = database();
-export const firebaseAuth = auth();
+const firebaseConfig = {
+  apiKey: "AIzaSyDtVddk_FoOXoD7_xObpuC_HCjRg94wct4",
+  authDomain: "viralboost-web-38eec.firebaseapp.com",
+  databaseURL: "https://viralboost-web-38eec-default-rtdb.firebaseio.com",
+  projectId: "viralboost-web-38eec",
+  storageBucket: "viralboost-web-38eec.firebasestorage.app",
+  messagingSenderId: "195415969543",
+  appId: "1:195415969543:android:e5ce89d331e23852577fa2",
+};
+
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+
+export const db = firebase.database();
+export const firebaseAuth = firebase.auth();
 
 export const PROVINCES = [
   'بغداد','أربيل','الأنبار','بابل','البصرة','حلبجة',
