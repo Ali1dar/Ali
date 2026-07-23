@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/utils/ThemeContext';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { firebaseAuth, db } from './src/utils/firebase';
 
 import * as ImagePicker from 'expo-image-picker';
@@ -134,7 +135,7 @@ function AppContent() {
   }, [user]);
 
   useEffect(() => {
-    const unsubscribe = firebaseAuth.onAuthStateChanged(u => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, u => {
       if (u) {
         setUser(u);
       } else {
@@ -222,7 +223,7 @@ function AppContent() {
 
   const logout = async () => {
     if (user) await db.ref(`users/${user.uid}/presence`).update({ online: false });
-    await firebaseAuth.signOut();
+    await signOut(firebaseAuth);
     showToast('تم تسجيل الخروج');
   };
 
