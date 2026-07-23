@@ -7,12 +7,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/utils/ThemeContext';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { firebaseAuth, db } from './src/utils/firebase';
 
 import * as ImagePicker from 'expo-image-picker';
 import { AudioModule } from 'expo-audio';
 import * as Location from 'expo-location';
+import messaging from '@react-native-firebase/messaging';
+import { PermissionsAndroid } from 'react-native';
 
 import {
   registerForPushNotifications,
@@ -29,13 +30,21 @@ import InboxScreen from './src/screens/InboxScreen';
 import SubscriptionOverlay from './src/components/SubscriptionOverlay';
 import Toast from './src/components/Toast';
 
-// ✅ دالة طلب أذونات الكاميرا والمعرض والصوت والموقع (الإشعارات تُطلب داخل registerForPushNotifications)
+// ✅ دالة طلب جميع الأذونات دفعة واحدة عند فتح التطبيق
 async function requestAllPermissions() {
   try {
     await ImagePicker.requestCameraPermissionsAsync();
     await ImagePicker.requestMediaLibraryPermissionsAsync();
     await AudioModule.requestRecordingPermissionsAsync();
     await Location.requestForegroundPermissionsAsync();
+
+    if (Platform.OS === 'android' && Platform.Version >= 33) {
+      await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+      );
+    } else {
+      await messaging().requestPermission();
+    }
   } catch (e) {
     console.log('خطأ بطلب الأذونات:', e);
   }
@@ -64,7 +73,6 @@ function AppContent() {
     stateRef.current = { chatOpen, settingsOpen, nearbyOpen, inboxOpen, user };
   }, [chatOpen, settingsOpen, nearbyOpen, inboxOpen, user]);
 
-  // ✅ طلب جميع الأذونات فور فتح التطبيق
   useEffect(() => {
     requestAllPermissions();
   }, []);
@@ -135,7 +143,7 @@ function AppContent() {
   }, [user]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(firebaseAuth, u => {
+    const unsubscribe = firebaseAuth.onAuthStateChanged(u => {
       if (u) {
         setUser(u);
       } else {
@@ -223,7 +231,7 @@ function AppContent() {
 
   const logout = async () => {
     if (user) await db.ref(`users/${user.uid}/presence`).update({ online: false });
-    await signOut(firebaseAuth);
+    await firebaseAuth.signOut();
     showToast('تم تسجيل الخروج');
   };
 
