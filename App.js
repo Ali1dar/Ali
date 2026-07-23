@@ -12,8 +12,6 @@ import { firebaseAuth, db } from './src/utils/firebase';
 import * as ImagePicker from 'expo-image-picker';
 import { AudioModule } from 'expo-audio';
 import * as Location from 'expo-location';
-import messaging from '@react-native-firebase/messaging';
-import { PermissionsAndroid } from 'react-native';
 
 import {
   registerForPushNotifications,
@@ -30,22 +28,13 @@ import InboxScreen from './src/screens/InboxScreen';
 import SubscriptionOverlay from './src/components/SubscriptionOverlay';
 import Toast from './src/components/Toast';
 
-// ✅ دالة طلب جميع الأذونات دفعة واحدة عند فتح التطبيق
+// ✅ دالة طلب أذونات الكاميرا والمعرض والصوت والموقع (الإشعارات تُطلب داخل registerForPushNotifications)
 async function requestAllPermissions() {
   try {
     await ImagePicker.requestCameraPermissionsAsync();
     await ImagePicker.requestMediaLibraryPermissionsAsync();
     await AudioModule.requestRecordingPermissionsAsync();
     await Location.requestForegroundPermissionsAsync();
-
-    // إذن الإشعارات: Android 13+ يحتاج PermissionsAndroid صراحة
-    if (Platform.OS === 'android' && Platform.Version >= 33) {
-      await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-      );
-    } else {
-      await messaging().requestPermission();
-    }
   } catch (e) {
     console.log('خطأ بطلب الأذونات:', e);
   }
