@@ -7,6 +7,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { useAudioPlayer, useAudioPlayerStatus, useAudioRecorder, useAudioRecorderState, RecordingPresets, AudioModule, setAudioModeAsync } from 'expo-audio';
 import * as Location from 'expo-location';
+import storage from '@react-native-firebase/storage';
 import { db, firebaseAuth } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -146,6 +147,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   const recorderState = useAudioRecorderState(recorder);
   const [isRecording, setIsRecording] = useState(false);
   const [recSeconds, setRecSeconds] = useState(0);
+  const [uploadingVoice, setUploadingVoice] = useState(false);
   const [userStatus, setUserStatus] = useState('');
   const [tabs, setTabs] = useState([]);
   const [tabNames, setTabNames] = useState({});
@@ -442,22 +444,31 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     if (!recorderState.isRecording) return;
     try {
       await recorder.stop();
-      // ✅ تصفير وضع الصوت فورًا بعد التوقف لتفادي تعارض جلسة التشغيل اللي يسبب الشاشة السوداء/التجمد
+      // ✅ تصفير وضع الصوت فورًا بعد التوقف لتفادي تعارض الجلسة native
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      const localUri = recorder.uri;
 
-      const uri = recorder.uri;
-      if (doSend && uri && chatId && activePid) {
-        // ✅ تأخير بسيط يعطي جلسة الصوت وقت كافٍ للتحرر native قبل عرض مشغّل الصوت بالقائمة
-        await new Promise(resolve => setTimeout(resolve, 150));
+      if (!doSend || !localUri || !chatId || !activePid) return;
 
-        const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-        await ref.set({ role, audio: uri, timestamp: Date.now(), seen: false });
-        onToast('تم إرسال الرسالة الصوتية 🎙️');
-        triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'مريض', '🎙️ أرسل رسالة صوتية');
-      }
+      setUploadingVoice(true);
+      onToast('جاري رفع الرسالة الصوتية...', 'info');
+
+      // ✅ رفع الملف الصوتي لـ Firebase Storage بدل تخزين المسار المحلي
+      const filename = `voice_${Date.now()}.m4a`;
+      const path = `voiceMessages/${chatId}/${activePid}/${filename}`;
+      const storageRef = storage().ref(path);
+      await storageRef.putFile(localUri);
+      const downloadUrl = await storageRef.getDownloadURL();
+
+      const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
+      await ref.set({ role, audio: downloadUrl, timestamp: Date.now(), seen: false });
+      onToast('تم إرسال الرسالة الصوتية 🎙️');
+      triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'مريض', '🎙️ أرسل رسالة صوتية');
     } catch (e) {
-      console.log('خطأ إيقاف التسجيل:', e);
-      onToast('حدث خطأ أثناء إرسال الرسالة الصوتية', 'error');
+      console.log('خطأ إيقاف/رفع التسجيل:', e);
+      onToast('فشل رفع الرسالة الصوتية، حاول مجدداً', 'error');
+    } finally {
+      setUploadingVoice(false);
     }
   };
 
@@ -663,15 +674,20 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
             <TouchableOpacity
               onPressIn={startRecording}
               onPressOut={() => stopRecordingAndSend(true)}
+              disabled={uploadingVoice}
               style={[st.iconBtn, isRecording && st.iconBtnRecording]}
               activeOpacity={0.7}
             >
-              <Text style={{ fontSize: 21 }}>{isRecording ? '🔴' : '🎙️'}</Text>
+              <Text style={{ fontSize: 21 }}>{isRecording ? '🔴' : (uploadingVoice ? '⏳' : '🎙️')}</Text>
             </TouchableOpacity>
           )}
           {isRecording ? (
             <View style={{ flex: 1 }}>
               <RecordingIndicator seconds={recSeconds} />
+            </View>
+          ) : uploadingVoice ? (
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: theme?.subText || '#666', fontSize: 13 }}>⏳ جاري رفع الرسالة الصوتية...</Text>
             </View>
           ) : (
             <TextInput
@@ -682,12 +698,12 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
               onSubmitEditing={sendMsg}
             />
           )}
-          {!isRecording && text.trim().length === 0 && role === 'patient' && (
+          {!isRecording && !uploadingVoice && text.trim().length === 0 && role === 'patient' && (
             <TouchableOpacity style={st.iconBtn} onPress={sendLocation}>
               <Text style={{ fontSize: 21 }}>📍</Text>
             </TouchableOpacity>
           )}
-          {!isRecording && (
+          {!isRecording && !uploadingVoice && (
             <TouchableOpacity style={[st.sendBtn, { backgroundColor: isEditingMode ? '#00c853' : (theme?.primary || '#00796b') }]} onPress={sendMsg}>
               <Text style={{ color: 'white', fontWeight: 'bold' }}>{isEditingMode ? 'حفظ' : 'إرسال'}</Text>
             </TouchableOpacity>
