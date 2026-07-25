@@ -442,8 +442,14 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     if (!recorderState.isRecording) return;
     try {
       await recorder.stop();
+      // ✅ تصفير وضع الصوت فورًا بعد التوقف لتفادي تعارض جلسة التشغيل اللي يسبب الشاشة السوداء/التجمد
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+
       const uri = recorder.uri;
       if (doSend && uri && chatId && activePid) {
+        // ✅ تأخير بسيط يعطي جلسة الصوت وقت كافٍ للتحرر native قبل عرض مشغّل الصوت بالقائمة
+        await new Promise(resolve => setTimeout(resolve, 150));
+
         const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
         await ref.set({ role, audio: uri, timestamp: Date.now(), seen: false });
         onToast('تم إرسال الرسالة الصوتية 🎙️');
@@ -451,6 +457,7 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
       }
     } catch (e) {
       console.log('خطأ إيقاف التسجيل:', e);
+      onToast('حدث خطأ أثناء إرسال الرسالة الصوتية', 'error');
     }
   };
 
