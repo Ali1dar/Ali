@@ -66,7 +66,7 @@
         }
       ],
       [
-        "expo-audio",
+        "expo-av",
         {
           "microphonePermission": "يرجى السماح باستخدام الميكروفون لإرسال رسائل صوتية"
         }
