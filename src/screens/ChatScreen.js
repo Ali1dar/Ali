@@ -444,21 +444,30 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
     if (!recorderState.isRecording) return;
     try {
       await recorder.stop();
-      // ✅ تصفير وضع الصوت فورًا بعد التوقف لتفادي تعارض الجلسة native
-      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
       const localUri = recorder.uri;
 
-      if (!doSend || !localUri || !chatId || !activePid) return;
+      // لا نستدعي setAudioModeAsync فوراً بعد stop() لتفادي تعارض جلسة الصوت الأصلية (native)
+      if (!doSend || !localUri || !chatId || !activePid) {
+        setTimeout(() => {
+          setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+        }, 300);
+        return;
+      }
 
       setUploadingVoice(true);
       onToast('جاري رفع الرسالة الصوتية...', 'info');
 
-      // ✅ رفع الملف الصوتي لـ Firebase Storage بدل تخزين المسار المحلي
+      // رفع الملف الصوتي إلى Firebase Storage
       const filename = `voice_${Date.now()}.m4a`;
       const path = `voiceMessages/${chatId}/${activePid}/${filename}`;
       const storageRef = storage().ref(path);
       await storageRef.putFile(localUri);
       const downloadUrl = await storageRef.getDownloadURL();
+
+      // تصفير وضع الصوت بعد انتهاء الرفع، بتأخير بسيط لتفادي تعارض الجلسة native
+      setTimeout(() => {
+        setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+      }, 300);
 
       const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
       await ref.set({ role, audio: downloadUrl, timestamp: Date.now(), seen: false });
@@ -788,3 +797,4 @@ const mkStyles = (t) => StyleSheet.create({
   timeText: { fontSize: 9.5, fontWeight: '400' },
   waChecks: { fontSize: 11, fontWeight: 'bold', marginLeft: 1 },
 });
+
