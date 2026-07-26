@@ -5,9 +5,8 @@ import {
   Image, Animated, Platform, Linking, ScrollView, BackHandler, Modal, Alert, Keyboard
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useAudioPlayer, useAudioPlayerStatus, useAudioRecorder, useAudioRecorderState, RecordingPresets, AudioModule, setAudioModeAsync } from 'expo-audio';
+import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
-import storage from '@react-native-firebase/storage';
 import { db, firebaseAuth } from '../utils/firebase';
 import { useTheme } from '../utils/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,27 +22,70 @@ const formatMsgTime = (ts) => {
 };
 
 function AudioPlayer({ uri, isMe, timestamp, seen }) {
-  const player = useAudioPlayer(uri);
-  const status = useAudioPlayerStatus(player);
+  const [sound, setSound] = useState(null);
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [position, setPosition] = useState(0);
   const [rate, setRate] = useState(1.0);
+  const intervalRef = useRef(null);
 
-  const playing = status.playing;
-  const duration = (status.duration || 0) * 1000;
-  const position = (status.currentTime || 0) * 1000;
+  useEffect(() => {
+    return () => {
+      if (sound) sound.unloadAsync();
+      clearInterval(intervalRef.current);
+    };
+  }, [sound]);
 
-  const loadAndPlay = () => {
-    if (playing) {
-      player.pause();
-    } else {
-      if (duration > 0 && position >= duration) player.seekTo(0);
-      player.play();
+  const loadAndPlay = async () => {
+    try {
+      if (sound) {
+        const status = await sound.getStatusAsync();
+        if (status.isPlaying) {
+          await sound.pauseAsync();
+          setPlaying(false);
+          clearInterval(intervalRef.current);
+        } else {
+          await sound.playAsync();
+          setPlaying(true);
+          startTracking(sound);
+        }
+        return;
+      }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      const { sound: s, status } = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: true, rate, shouldCorrectPitch: true }
+      );
+      setSound(s);
+      setDuration(status.durationMillis || 0);
+      setPlaying(true);
+      startTracking(s);
+      s.setOnPlaybackStatusUpdate(st => {
+        if (st.didJustFinish) {
+          setPlaying(false);
+          setPosition(0);
+          clearInterval(intervalRef.current);
+          s.unloadAsync();
+          setSound(null);
+        }
+      });
+    } catch (e) {
+      console.log('خطأ تشغيل الصوت:', e);
     }
   };
 
-  const toggleRate = () => {
+  const startTracking = (s) => {
+    clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(async () => {
+      const st = await s.getStatusAsync();
+      if (st.isLoaded) setPosition(st.positionMillis || 0);
+    }, 300);
+  };
+
+  const toggleRate = async () => {
     const newRate = rate === 1.0 ? 1.5 : rate === 1.5 ? 2.0 : 1.0;
     setRate(newRate);
-    player.setPlaybackRate(newRate);
+    if (sound) await sound.setRateAsync(newRate, true);
   };
 
   const fmtTime = (ms) => {
@@ -143,11 +185,9 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(recorder);
+  const [recording, setRecording] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recSeconds, setRecSeconds] = useState(0);
-  const [uploadingVoice, setUploadingVoice] = useState(false);
   const [userStatus, setUserStatus] = useState('');
   const [tabs, setTabs] = useState([]);
   const [tabNames, setTabNames] = useState({});
@@ -423,61 +463,34 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
   };
 
   const startRecording = async () => {
-    try {
-      const permission = await AudioModule.requestRecordingPermissionsAsync();
-      if (!permission.granted) return onToast('يرجى السماح باستخدام الميكروفون', 'error');
-      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      await recorder.prepareToRecordAsync();
-      recorder.record();
-      setIsRecording(true);
-      setRecSeconds(0);
-      recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
-    } catch (e) {
-      console.log('خطأ بدء التسجيل:', e);
-    }
+    const { status } = await Audio.requestPermissionsAsync();
+    if (status !== 'granted') return onToast('يرجى السماح باستخدام الميكروفون', 'error');
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+    const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+    setRecording(rec);
+    setIsRecording(true);
+    setRecSeconds(0);
+    recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
   };
 
   const stopRecordingAndSend = async (doSend = true) => {
     clearInterval(recTimerRef.current);
     setIsRecording(false);
     setRecSeconds(0);
-    if (!recorderState.isRecording) return;
+    if (!recording) return;
     try {
-      await recorder.stop();
-      const localUri = recorder.uri;
-
-      // لا نستدعي setAudioModeAsync فوراً بعد stop() لتفادي تعارض جلسة الصوت الأصلية (native)
-      if (!doSend || !localUri || !chatId || !activePid) {
-        setTimeout(() => {
-          setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
-        }, 300);
-        return;
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      setRecording(null);
+      if (doSend && uri && chatId && activePid) {
+        const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
+        await ref.set({ role, audio: uri, timestamp: Date.now(), seen: false });
+        onToast('تم إرسال الرسالة الصوتية 🎙️');
+        triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'مريض', '🎙️ أرسل رسالة صوتية');
       }
-
-      setUploadingVoice(true);
-      onToast('جاري رفع الرسالة الصوتية...', 'info');
-
-      // رفع الملف الصوتي إلى Firebase Storage
-      const filename = `voice_${Date.now()}.m4a`;
-      const path = `voiceMessages/${chatId}/${activePid}/${filename}`;
-      const storageRef = storage().ref(path);
-      await storageRef.putFile(localUri);
-      const downloadUrl = await storageRef.getDownloadURL();
-
-      // تصفير وضع الصوت بعد انتهاء الرفع، بتأخير بسيط لتفادي تعارض الجلسة native
-      setTimeout(() => {
-        setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
-      }, 300);
-
-      const ref = db.ref(`chats/${chatId}/${activePid}/messages`).push();
-      await ref.set({ role, audio: downloadUrl, timestamp: Date.now(), seen: false });
-      onToast('تم إرسال الرسالة الصوتية 🎙️');
-      triggerNotification(role === 'pharmacy' ? 'الصيدلية' : 'مريض', '🎙️ أرسل رسالة صوتية');
     } catch (e) {
-      console.log('خطأ إيقاف/رفع التسجيل:', e);
-      onToast('فشل رفع الرسالة الصوتية، حاول مجدداً', 'error');
-    } finally {
-      setUploadingVoice(false);
+      setRecording(null);
+      console.log('خطأ إيقاف التسجيل:', e);
     }
   };
 
@@ -683,20 +696,15 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
             <TouchableOpacity
               onPressIn={startRecording}
               onPressOut={() => stopRecordingAndSend(true)}
-              disabled={uploadingVoice}
               style={[st.iconBtn, isRecording && st.iconBtnRecording]}
               activeOpacity={0.7}
             >
-              <Text style={{ fontSize: 21 }}>{isRecording ? '🔴' : (uploadingVoice ? '⏳' : '🎙️')}</Text>
+              <Text style={{ fontSize: 21 }}>{isRecording ? '🔴' : '🎙️'}</Text>
             </TouchableOpacity>
           )}
           {isRecording ? (
             <View style={{ flex: 1 }}>
               <RecordingIndicator seconds={recSeconds} />
-            </View>
-          ) : uploadingVoice ? (
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: theme?.subText || '#666', fontSize: 13 }}>⏳ جاري رفع الرسالة الصوتية...</Text>
             </View>
           ) : (
             <TextInput
@@ -707,12 +715,12 @@ export default function ChatScreen({ visible, onClose, chatId, pharmacyId, role,
               onSubmitEditing={sendMsg}
             />
           )}
-          {!isRecording && !uploadingVoice && text.trim().length === 0 && role === 'patient' && (
+          {!isRecording && text.trim().length === 0 && role === 'patient' && (
             <TouchableOpacity style={st.iconBtn} onPress={sendLocation}>
               <Text style={{ fontSize: 21 }}>📍</Text>
             </TouchableOpacity>
           )}
-          {!isRecording && !uploadingVoice && (
+          {!isRecording && (
             <TouchableOpacity style={[st.sendBtn, { backgroundColor: isEditingMode ? '#00c853' : (theme?.primary || '#00796b') }]} onPress={sendMsg}>
               <Text style={{ color: 'white', fontWeight: 'bold' }}>{isEditingMode ? 'حفظ' : 'إرسال'}</Text>
             </TouchableOpacity>
