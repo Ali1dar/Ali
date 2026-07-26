@@ -19,9 +19,7 @@
     },
     "android": {
       "versionCode": 12,
-      "targetSdkVersion": 36,
       "softwareKeyboardLayoutMode": "resize",
-      "windowSoftInputMode": "adjustResize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#00796b"
