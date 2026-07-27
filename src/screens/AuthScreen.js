@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator,
-  ScrollView, Dimensions, Linking,
+  ScrollView, Dimensions, Linking, Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { firebaseAuth, db, arabicError } from '../utils/firebase';
@@ -34,6 +34,11 @@ export default function AuthScreen({ onToast }) {
   const [otpSent, setOtpSent] = useState(false);
   const confirmRef = useRef(null);
 
+  // ✅ حالة Modal استعادة كلمة المرور
+  const [resetModalVisible, setResetModalVisible] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
   const handlePharmacyWhatsApp = () => {
     const phoneNumber = '9647823017544';
     const message = 'مرحباً، أود تسجيل صيدليتي وتفعيل الحساب في تطبيق دليلك الدوائي.';
@@ -63,10 +68,10 @@ export default function AuthScreen({ onToast }) {
         });
         await saveFcmToken(cred.user.uid);
       }
-    } catch (e) { 
-      onToast(e.code ? arabicError(e.code) : 'حدث خطأ في عملية التحقق', 'error'); 
-    } finally { 
-      setLoading(false); 
+    } catch (e) {
+      onToast(e.code ? arabicError(e.code) : 'حدث خطأ في عملية التحقق', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -79,10 +84,10 @@ export default function AuthScreen({ onToast }) {
       confirmRef.current = await firebaseAuth.signInWithPhoneNumber(p);
       setOtpSent(true);
       onToast('تم إرسال رمز التفعيل 💬');
-    } catch (e) { 
-      onToast(e.code ? arabicError(e.code) : 'خطأ في إرسال الرمز', 'error'); 
-    } finally { 
-      setLoading(false); 
+    } catch (e) {
+      onToast(e.code ? arabicError(e.code) : 'خطأ في إرسال الرمز', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -101,10 +106,26 @@ export default function AuthScreen({ onToast }) {
       }
       await saveFcmToken(r.user.uid);
       onToast('تم الدخول بنجاح!');
-    } catch { 
-      onToast('رمز خاطئ أو منتهي الصلاحية', 'error'); 
-    } finally { 
-      setLoading(false); 
+    } catch {
+      onToast('رمز خاطئ أو منتهي الصلاحية', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ دالة إرسال رابط استعادة كلمة المرور
+  const handleResetPassword = async () => {
+    if (!resetEmail.trim()) return onToast('يرجى إدخال البريد الإلكتروني', 'error');
+    setResetLoading(true);
+    try {
+      await firebaseAuth.sendPasswordResetEmail(resetEmail.trim());
+      setResetModalVisible(false);
+      setResetEmail('');
+      onToast('✅ تم إرسال رابط الاستعادة، تحقق من بريدك');
+    } catch (e) {
+      onToast(e.code ? arabicError(e.code) : 'البريد الإلكتروني غير مسجل أو غير صحيح', 'error');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -229,7 +250,19 @@ export default function AuthScreen({ onToast }) {
             }
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => setIsLogin(!isLogin)} style={{ marginTop: 10 }}>
+          {/* ✅ زر نسيت كلمة المرور — يظهر فقط في تسجيل الدخول بالبريد */}
+          {isLogin && method === 'email' && (
+            <TouchableOpacity
+              onPress={() => setResetModalVisible(true)}
+              style={{ marginTop: 2, marginBottom: 6, alignSelf: 'center' }}
+            >
+              <Text style={{ color: theme.primary, fontSize: 13, textDecorationLine: 'underline' }}>
+                نسيت كلمة المرور؟
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity onPress={() => setIsLogin(!isLogin)} style={{ marginTop: 6 }}>
             <Text style={{ color: theme.primary, textAlign: 'center', textDecorationLine: 'underline', fontSize: 14 }}>
               {isLogin ? 'ليس لديك حساب؟ إنشاء حساب جديد' : 'لديك حساب؟ تسجيل الدخول'}
             </Text>
@@ -247,6 +280,55 @@ export default function AuthScreen({ onToast }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* ✅ Modal استعادة كلمة المرور */}
+      <Modal
+        visible={resetModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setResetModalVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={[s.modalBox, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+
+            <Text style={[s.modalTitle, { color: theme.primary }]}>🔑 استعادة كلمة المرور</Text>
+            <Text style={[s.modalSub, { color: theme.subText }]}>
+              أدخل بريدك الإلكتروني وسنرسل لك رابط إعادة التعيين
+            </Text>
+
+            <TextInput
+              style={[s.input, { backgroundColor: theme.bg, borderColor: theme.border, color: theme.text, marginTop: 10 }]}
+              placeholder="البريد الإلكتروني"
+              placeholderTextColor={theme.subText}
+              value={resetEmail}
+              onChangeText={setResetEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              textAlign="right"
+            />
+
+            <TouchableOpacity
+              style={[s.btn, { backgroundColor: theme.primary, marginTop: 4 }]}
+              onPress={handleResetPassword}
+              disabled={resetLoading}
+            >
+              {resetLoading
+                ? <ActivityIndicator color="white" />
+                : <Text style={s.btnTxt}>إرسال رابط الاستعادة 📧</Text>
+              }
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => { setResetModalVisible(false); setResetEmail(''); }}
+              style={{ marginTop: 10, alignSelf: 'center' }}
+            >
+              <Text style={{ color: theme.subText, fontSize: 13 }}>إلغاء</Text>
+            </TouchableOpacity>
+
+          </View>
+        </View>
+      </Modal>
+
     </KeyboardAvoidingView>
   );
 }
@@ -275,4 +357,31 @@ const styles = (theme) => StyleSheet.create({
     justifyContent: 'center', width: '100%', backgroundColor: 'rgba(0,121,107,0.03)',
   },
   pharmacyBtnTxt: { fontSize: 13, fontWeight: 'bold', textAlign: 'center' },
+
+  // ✅ Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalBox: {
+    width: '100%',
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 22,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  modalSub: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
 });
